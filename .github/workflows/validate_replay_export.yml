@@ -81,9 +81,22 @@ jobs:
             -workspace LoopWorkspace.xcworkspace \
             -scheme ReplayCoreRegression \
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
-            -only-testing:LoopTests/LoopDataManagerDosingTests \
-            -skip-testing:LoopTests/LoopDataManagerDosingTests/testLoopGetStateRecommendsManualBolusWithMomentum \
-            -skip-testing:LoopTests/LoopDataManagerDosingTests/testLoopGetStateRecommendsManualBolusWithoutMomentum
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testForecastFromLiveCaptureInputData \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testFlatAndStable \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndStable \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndFalling \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndRisingWithCOB \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLowAndFallingWithCOB \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLowWithLowTreatment \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalDoesntCancelTempBasalIfHigher \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalCancelsTempBasalIfLower \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testOpenLoopCancelsTempBasal \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testReceivedUnreliableCGMReadingCancelsTempBasal \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLoopEnactsTempBasalWithoutManualBolusRecommendation \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLoopRecommendsTempBasalWithoutEnactingIfOpenLoop \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testIsClosedLoopAvoidsTriggeringTempBasalCancelOnCreation \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testAutoBolusMaxIOBClamping \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testTempBasalMaxIOBClamping
 
       - name: Compile Loop without signing
         run: |
