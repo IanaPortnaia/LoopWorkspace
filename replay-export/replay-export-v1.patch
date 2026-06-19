@@ -24,7 +24,7 @@ index aba4104..6ea4bdf 100644
 +        }
 +    }
 +
-+    private func replayCaptureTestingDetails(automaticDoseDecision: StoredDosingDecision?) -> [String: Any]? {
++    func replayCaptureTestingDetails(automaticDoseDecision: StoredDosingDecision?) -> [String: Any]? {
 +        guard let loopDecision = automaticDoseDecision, loopDecision.reason == "loop" else {
 +            return nil
 +        }
@@ -93,7 +93,7 @@ index 95a6998..174d823 100644
  import XCTest
  @testable import NightscoutServiceKit
  
-@@ -57,3 +59,85 @@ final class BolusRemoteNotificationTestCase: XCTestCase {
+@@ -57,3 +59,78 @@ final class BolusRemoteNotificationTestCase: XCTestCase {
      }
      
  }
@@ -146,15 +146,13 @@ index 95a6998..174d823 100644
 +            syncIdentifier: statusIdentifier
 +        )
 +
-+        let dictionary = statusDecision
-+            .deviceStatus(automaticDoseDecision: loopDecision)
-+            .dictionaryRepresentation
++        let dictionary = try XCTUnwrap(
++            statusDecision.replayCaptureTestingDetails(automaticDoseDecision: loopDecision)
++        )
 +
 +        XCTAssertTrue(JSONSerialization.isValidJSONObject(dictionary))
 +        XCTAssertLessThan(try JSONSerialization.data(withJSONObject: dictionary).count, 10_000)
-+        let loop = try XCTUnwrap(dictionary["loop"] as? [String: Any])
-+        let details = try XCTUnwrap(loop["testingDetails"] as? [String: Any])
-+        let capture = try XCTUnwrap(details["replayCapture"] as? [String: Any])
++        let capture = try XCTUnwrap(dictionary["replayCapture"] as? [String: Any])
 +        XCTAssertEqual(capture["schemaVersion"] as? Int, 1)
 +        XCTAssertEqual(capture["captureRole"] as? String, "completedLoopDecision")
 +        XCTAssertEqual(capture["loopDecisionSyncIdentifier"] as? String, loopIdentifier.uuidString)
@@ -171,11 +169,6 @@ index 95a6998..174d823 100644
 +    func testReplayCaptureIsAbsentWithoutCompletedLoopDecision() throws {
 +        let statusDecision = StoredDosingDecision(reason: "updateRemoteRecommendation")
 +
-+        let dictionary = statusDecision
-+            .deviceStatus(automaticDoseDecision: nil)
-+            .dictionaryRepresentation
-+
-+        let loop = try XCTUnwrap(dictionary["loop"] as? [String: Any])
-+        XCTAssertNil(loop["testingDetails"])
++        XCTAssertNil(statusDecision.replayCaptureTestingDetails(automaticDoseDecision: nil))
 +    }
 +}
