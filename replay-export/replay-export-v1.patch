@@ -1,0 +1,181 @@
+diff --git a/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift b/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift
+index aba4104..6ea4bdf 100644
+--- a/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift
++++ b/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift
+@@ -53,6 +53,67 @@ extension StoredDosingDecision {
+             bolusVolume: automaticDoseRecommendation.bolusUnits ?? 0)
+     }
+ 
++    private var replayCapturePrediction: [String: Any]? {
++        loopStatusPredicted?.dictionaryRepresentation
++    }
++
++    private var replayCaptureRecommendation: [String: Any]? {
++        loopStatusAutomaticDoseRecommendation?.dictionaryRepresentation
++    }
++
++    private var replayCaptureHistoricalGlucose: [[String: Any]] {
++        let formatter = ISO8601DateFormatter()
++        return (historicalGlucose ?? []).map {
++            [
++                "timestamp": formatter.string(from: $0.startDate),
++                "mgdl": $0.quantity.doubleValue(for: .milligramsPerDeciliter)
++            ]
++        }
++    }
++
++    private func replayCaptureTestingDetails(automaticDoseDecision: StoredDosingDecision?) -> [String: Any]? {
++        guard let loopDecision = automaticDoseDecision, loopDecision.reason == "loop" else {
++            return nil
++        }
++
++        let formatter = ISO8601DateFormatter()
++        var capture: [String: Any] = [
++            "schemaVersion": 1,
++            "captureRole": "completedLoopDecision",
++            "statusDecisionSyncIdentifier": syncIdentifier.uuidString,
++            "statusDecisionReason": reason,
++            "statusDecisionTimestamp": formatter.string(from: date),
++            "loopDecisionSyncIdentifier": loopDecision.syncIdentifier.uuidString,
++            "loopDecisionReason": loopDecision.reason,
++            "loopDecisionTimestamp": formatter.string(from: loopDecision.date),
++            "historicalGlucose": loopDecision.replayCaptureHistoricalGlucose
++        ]
++
++        if let settingsSyncIdentifier = loopDecision.settings?.syncIdentifier {
++            capture["settingsSyncIdentifier"] = settingsSyncIdentifier.uuidString
++        }
++        if let prediction = loopDecision.replayCapturePrediction {
++            capture["dosingPrediction"] = prediction
++        }
++        if let recommendation = loopDecision.replayCaptureRecommendation {
++            capture["automaticDoseRecommendation"] = recommendation
++        }
++        if let iob = loopDecision.loopStatusIOB {
++            capture["iob"] = iob.dictionaryRepresentation
++        }
++        if let cob = loopDecision.loopStatusCOB {
++            capture["cob"] = cob.dictionaryRepresentation
++        }
++        if !loopDecision.warnings.isEmpty {
++            capture["warningIdentifiers"] = loopDecision.warnings.map(\.id)
++        }
++        if !loopDecision.errors.isEmpty {
++            capture["errorIdentifiers"] = loopDecision.errors.map(\.id)
++        }
++
++        return ["replayCapture": capture]
++    }
++
+     var loopStatusRecommendedBolus: Double? {
+         guard let manualBolusRecommendation = manualBolusRecommendation else {
+             return nil
+@@ -156,7 +217,8 @@ extension StoredDosingDecision {
+                                    automaticDoseRecommendation: loopStatusAutomaticDoseRecommendation,
+                                    recommendedBolus: loopStatusRecommendedBolus,
+                                    enacted: automaticDoseDecision?.loopStatusEnacted,
+-                                   failureReason: automaticDoseDecision?.loopStatusFailureReason),
++                                   failureReason: automaticDoseDecision?.loopStatusFailureReason,
++                                   testingDetails: replayCaptureTestingDetails(automaticDoseDecision: automaticDoseDecision)),
+             overrideStatus: overrideStatus)
+     }
+     
+diff --git a/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift b/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift
+index 95a6998..174d823 100644
+--- a/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift
++++ b/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift
+@@ -6,6 +6,8 @@
+ //  Copyright © 2023 Pete Schwamb. All rights reserved.
+ //
+ 
++import HealthKit
++import LoopKit
+ import XCTest
+ @testable import NightscoutServiceKit
+ 
+@@ -57,3 +59,85 @@ final class BolusRemoteNotificationTestCase: XCTestCase {
+     }
+     
+ }
++
++final class ReplayCaptureTestCase: XCTestCase {
++
++    func testReplayCaptureContainsCompletedLoopDecision() throws {
++        let loopDate = Date(timeIntervalSince1970: 1_700_000_000)
++        let statusDate = loopDate.addingTimeInterval(10)
++        let loopIdentifier = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
++        let statusIdentifier = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
++        let settingsIdentifier = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
++        let glucoseUnit = HKUnit.milligramsPerDeciliter
++
++        let loopDecision = StoredDosingDecision(
++            date: loopDate,
++            reason: "loop",
++            settings: StoredDosingDecision.Settings(syncIdentifier: settingsIdentifier),
++            historicalGlucose: [
++                HistoricalGlucoseValue(
++                    startDate: loopDate.addingTimeInterval(-300),
++                    quantity: HKQuantity(unit: glucoseUnit, doubleValue: 108)
++                ),
++                HistoricalGlucoseValue(
++                    startDate: loopDate,
++                    quantity: HKQuantity(unit: glucoseUnit, doubleValue: 110)
++                )
++            ],
++            carbsOnBoard: CarbValue(startDate: loopDate, value: 12),
++            insulinOnBoard: InsulinValue(startDate: loopDate, value: 1.25),
++            predictedGlucose: [
++                PredictedGlucoseValue(
++                    startDate: loopDate,
++                    quantity: HKQuantity(unit: glucoseUnit, doubleValue: 110)
++                ),
++                PredictedGlucoseValue(
++                    startDate: loopDate.addingTimeInterval(300),
++                    quantity: HKQuantity(unit: glucoseUnit, doubleValue: 105)
++                )
++            ],
++            automaticDoseRecommendation: AutomaticDoseRecommendation(
++                basalAdjustment: TempBasalRecommendation(unitsPerHour: 0.7, duration: 30 * 60),
++                bolusUnits: 0.25
++            ),
++            syncIdentifier: loopIdentifier
++        )
++        let statusDecision = StoredDosingDecision(
++            date: statusDate,
++            reason: "updateRemoteRecommendation",
++            syncIdentifier: statusIdentifier
++        )
++
++        let dictionary = statusDecision
++            .deviceStatus(automaticDoseDecision: loopDecision)
++            .dictionaryRepresentation
++
++        XCTAssertTrue(JSONSerialization.isValidJSONObject(dictionary))
++        XCTAssertLessThan(try JSONSerialization.data(withJSONObject: dictionary).count, 10_000)
++        let loop = try XCTUnwrap(dictionary["loop"] as? [String: Any])
++        let details = try XCTUnwrap(loop["testingDetails"] as? [String: Any])
++        let capture = try XCTUnwrap(details["replayCapture"] as? [String: Any])
++        XCTAssertEqual(capture["schemaVersion"] as? Int, 1)
++        XCTAssertEqual(capture["captureRole"] as? String, "completedLoopDecision")
++        XCTAssertEqual(capture["loopDecisionSyncIdentifier"] as? String, loopIdentifier.uuidString)
++        XCTAssertEqual(capture["statusDecisionSyncIdentifier"] as? String, statusIdentifier.uuidString)
++        XCTAssertEqual(capture["settingsSyncIdentifier"] as? String, settingsIdentifier.uuidString)
++
++        let prediction = try XCTUnwrap(capture["dosingPrediction"] as? [String: Any])
++        XCTAssertEqual(prediction["values"] as? [Double], [110, 105])
++        let recommendation = try XCTUnwrap(capture["automaticDoseRecommendation"] as? [String: Any])
++        XCTAssertEqual(recommendation["bolusVolume"] as? Double, 0.25)
++        XCTAssertEqual((capture["historicalGlucose"] as? [[String: Any]])?.count, 2)
++    }
++
++    func testReplayCaptureIsAbsentWithoutCompletedLoopDecision() throws {
++        let statusDecision = StoredDosingDecision(reason: "updateRemoteRecommendation")
++
++        let dictionary = statusDecision
++            .deviceStatus(automaticDoseDecision: nil)
++            .dictionaryRepresentation
++
++        let loop = try XCTUnwrap(dictionary["loop"] as? [String: Any])
++        XCTAssertNil(loop["testingDetails"])
++    }
++}
