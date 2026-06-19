@@ -56,7 +56,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -project NightscoutService/NightscoutService.xcodeproj \
+            -workspace LoopWorkspace.xcworkspace \
             -scheme Shared \
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
             -only-testing:NightscoutServiceKitTests/ReplayCaptureTestCase \
