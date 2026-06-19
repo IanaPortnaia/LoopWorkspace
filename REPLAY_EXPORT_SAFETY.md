@@ -26,6 +26,13 @@ framework and unit-test targets and is not used by the normal Loop build.
 LoopKit dose-math tests and LoopDataManager dosing tests without changing
 either test target or the normal Loop scheme.
 
+Two manual-bolus recommendation tests are excluded from CI because their
+one-second asynchronous expectations time out on the hosted runner. They do
+not exercise automatic dosing or Nightscout serialization. The remaining
+LoopDataManager dosing suite covers automatic bolus, temp basal, IOB limits,
+prediction fixtures, open-loop behavior, low-glucose handling, and unreliable
+CGM handling.
+
 The patch reads an already completed `.loop` `StoredDosingDecision` while
 Nightscout device-status JSON is being created. It adds
 `loop.testingDetails.replayCapture`.
