@@ -22,6 +22,10 @@ The feature branch adds a validation-only workspace scheme named
 `NightscoutReplayValidation`. It references the existing NightscoutService
 framework and unit-test targets and is not used by the normal Loop build.
 
+`ReplayCoreRegression` is also validation-only. It exposes the existing
+LoopKit dose-math tests and LoopDataManager dosing tests without changing
+either test target or the normal Loop scheme.
+
 The patch reads an already completed `.loop` `StoredDosingDecision` while
 Nightscout device-status JSON is being created. It adds
 `loop.testingDetails.replayCapture`.
