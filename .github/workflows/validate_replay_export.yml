@@ -13,7 +13,7 @@ on:
 
 jobs:
   validate:
-    name: Compile and test without signing
+    name: Compile and test without distribution signing
     runs-on: macos-26
     timeout-minutes: 90
     permissions:
@@ -81,8 +81,7 @@ jobs:
             -workspace LoopWorkspace.xcworkspace \
             -scheme ReplayCoreRegression \
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
-            -only-testing:LoopTests/LoopDataManagerDosingTests \
-            CODE_SIGNING_ALLOWED=NO
+            -only-testing:LoopTests/LoopDataManagerDosingTests
 
       - name: Compile Loop without signing
         run: |

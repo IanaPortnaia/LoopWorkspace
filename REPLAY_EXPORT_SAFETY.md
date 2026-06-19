@@ -63,7 +63,9 @@ Before installation:
 
 1. Run `python3 Scripts/validate_replay_export_patch.py`.
 2. Run the `Validate Replay Export` workflow. It applies the staged patch only
-   inside its disposable runner and does not archive or sign an application.
+   inside its disposable runner and does not archive or distribution-sign an
+   application. The hosted Loop tests use normal local simulator signing so
+   the test host retains its required Siri entitlement.
 3. Run Loop, LoopKit, and NightscoutService tests.
 4. Confirm a release build succeeds without changing signing configuration.
 5. Compare an unmodified and instrumented build using identical Loop dosing
