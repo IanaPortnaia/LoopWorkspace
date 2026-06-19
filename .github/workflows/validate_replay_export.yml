@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/validate_replay_export.yml"
+      - "LoopWorkspace.xcworkspace/xcshareddata/xcschemes/NightscoutReplayValidation.xcscheme"
       - "REPLAY_EXPORT_SAFETY.md"
       - "Scripts/validate_replay_export_patch.py"
       - "replay-export/**"
@@ -57,7 +58,7 @@ jobs:
           set -o pipefail
           xcodebuild test \
             -workspace LoopWorkspace.xcworkspace \
-            -scheme Shared \
+            -scheme NightscoutReplayValidation \
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
             -only-testing:NightscoutServiceKitTests/ReplayCaptureTestCase \
             CODE_SIGNING_ALLOWED=NO

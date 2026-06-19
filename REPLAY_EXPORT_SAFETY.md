@@ -18,6 +18,10 @@ The patch also adds assertions to the existing NightscoutService test target in:
 
 `NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift`
 
+The feature branch adds a validation-only workspace scheme named
+`NightscoutReplayValidation`. It references the existing NightscoutService
+framework and unit-test targets and is not used by the normal Loop build.
+
 The patch reads an already completed `.loop` `StoredDosingDecision` while
 Nightscout device-status JSON is being created. It adds
 `loop.testingDetails.replayCapture`.
