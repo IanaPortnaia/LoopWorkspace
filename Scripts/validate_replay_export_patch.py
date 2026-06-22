@@ -8,7 +8,7 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PATCH = ROOT / "replay-export" / "replay-export-v1.patch"
+PATCH = ROOT / "patches" / "replay-export-v1.patch"
 ALLOWED_PATHS = {
     "NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift",
     "NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift",
@@ -81,5 +81,5 @@ if actual_submodule_commit != EXPECTED_SUBMODULE_COMMIT:
         f"(expected {EXPECTED_SUBMODULE_COMMIT}, found {actual_submodule_commit})"
     )
 
-run("git", "apply", "--check", str(PATCH))
+run("git", "apply", "--check", "--whitespace=fix", str(PATCH))
 print("Replay-export patch is confined to the approved read-only serialization boundary.")

@@ -76,7 +76,7 @@ cannot propagate into Loop prediction or dose enactment.
 Before installation:
 
 1. Run `python3 Scripts/validate_replay_export_patch.py`.
-2. Run the `Validate Replay Export` workflow. It applies the staged patch only
+2. Run the `Validate Replay Export` workflow. It applies the promoted patch only
    inside its disposable runner and does not archive or distribution-sign an
    application. The hosted Loop tests use normal local simulator signing so
    the test host retains its required Siri entitlement.
@@ -90,6 +90,7 @@ Before installation:
 No static review can provide absolute assurance. Installation remains blocked
 until compilation and behavioral-equivalence tests pass.
 
-The patch remains under `replay-export/`, outside the build workflow's
-auto-applied `patches/` directory. Promotion into `patches/` is a separate
-change made only after validation succeeds.
+The validated patch is stored as `patches/replay-export-v1.patch`. The normal
+build workflow will apply it after this pull request is merged. Merging does
+not itself start a build; signed archive and TestFlight upload remain separate
+manual or scheduled workflow actions.

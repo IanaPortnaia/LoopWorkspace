@@ -9,7 +9,7 @@ on:
       - "LoopWorkspace.xcworkspace/xcshareddata/xcschemes/ReplayCoreRegression.xcscheme"
       - "REPLAY_EXPORT_SAFETY.md"
       - "Scripts/validate_replay_export_patch.py"
-      - "replay-export/**"
+      - "patches/replay-export-v1.patch"
 
 jobs:
   validate:
@@ -31,8 +31,8 @@ jobs:
       - name: Validate patch boundary
         run: python3 Scripts/validate_replay_export_patch.py
 
-      - name: Apply staged patch
-        run: git apply replay-export/replay-export-v1.patch
+      - name: Apply promoted patch
+        run: git apply patches/replay-export-v1.patch --whitespace=fix
 
       - name: Verify applied production diff
         shell: bash
