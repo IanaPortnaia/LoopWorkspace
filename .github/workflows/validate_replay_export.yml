@@ -26,7 +26,7 @@ jobs:
           submodules: recursive
 
       - name: Select Xcode
-        run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
+        run: sudo xcode-select --switch /Applications/Xcode_26.4.app/Contents/Developer
 
       - name: Validate patch boundary
         run: python3 Scripts/validate_replay_export_patch.py
