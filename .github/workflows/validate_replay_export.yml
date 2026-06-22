@@ -74,30 +74,6 @@ jobs:
             -only-testing:LoopKitTests/DoseMathTests \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Run Loop dosing regression tests
-        run: |
-          set -o pipefail
-          xcodebuild test \
-            -workspace LoopWorkspace.xcworkspace \
-            -scheme ReplayCoreRegression \
-            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testForecastFromLiveCaptureInputData \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testFlatAndStable \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndStable \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndFalling \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndRisingWithCOB \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testLowAndFallingWithCOB \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testLowWithLowTreatment \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalDoesntCancelTempBasalIfHigher \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalCancelsTempBasalIfLower \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testOpenLoopCancelsTempBasal \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testReceivedUnreliableCGMReadingCancelsTempBasal \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testLoopEnactsTempBasalWithoutManualBolusRecommendation \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testLoopRecommendsTempBasalWithoutEnactingIfOpenLoop \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testIsClosedLoopAvoidsTriggeringTempBasalCancelOnCreation \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testAutoBolusMaxIOBClamping \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testTempBasalMaxIOBClamping
-
       - name: Compile Loop without signing
         run: |
           set -o pipefail
@@ -113,3 +89,61 @@ jobs:
           set -euo pipefail
           test -z "$(git -C Loop diff --name-only)"
           test -z "$(git -C LoopKit diff --name-only)"
+
+      - name: Run Loop dosing regression tests
+        run: |
+          set -uo pipefail
+          result_bundle="$RUNNER_TEMP/LoopDosingRegression.xcresult"
+          test_log="$RUNNER_TEMP/loop-dosing-regression.log"
+          rm -rf "$result_bundle"
+
+          set +e
+          xcodebuild test \
+            -workspace LoopWorkspace.xcworkspace \
+            -scheme ReplayCoreRegression \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
+            -resultBundlePath "$result_bundle" \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testForecastFromLiveCaptureInputData \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testFlatAndStable \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndStable \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndFalling \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndRisingWithCOB \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLowAndFallingWithCOB \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLowWithLowTreatment \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalDoesntCancelTempBasalIfHigher \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalCancelsTempBasalIfLower \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testOpenLoopCancelsTempBasal \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testReceivedUnreliableCGMReadingCancelsTempBasal \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLoopEnactsTempBasalWithoutManualBolusRecommendation \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLoopRecommendsTempBasalWithoutEnactingIfOpenLoop \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testIsClosedLoopAvoidsTriggeringTempBasalCancelOnCreation \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testAutoBolusMaxIOBClamping \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testTempBasalMaxIOBClamping \
+            2>&1 | tee "$test_log"
+          test_status="${PIPESTATUS[0]}"
+          set -e
+
+          echo "## Loop dosing regression result" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "Test Case .* (passed|failed)|Executed [0-9]+ tests|Testing failed:|error:" "$test_log" |
+            tail -n 200 |
+            tee -a "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          if test -d "$result_bundle"; then
+            xcrun xcresulttool get test-results summary \
+              --path "$result_bundle" \
+              --format json > "$RUNNER_TEMP/loop-dosing-summary.json" || true
+          fi
+
+          exit "$test_status"
+
+      - name: Upload Loop dosing diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loop-dosing-regression-diagnostics
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/loop-dosing-regression.log
+            ${{ runner.temp }}/loop-dosing-summary.json
