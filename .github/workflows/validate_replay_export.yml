@@ -1,0 +1,153 @@
+name: Validate Replay Export
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/validate_replay_export.yml"
+      - "LoopWorkspace.xcworkspace/xcshareddata/xcschemes/NightscoutReplayValidation.xcscheme"
+      - "LoopWorkspace.xcworkspace/xcshareddata/xcschemes/ReplayCoreRegression.xcscheme"
+      - "REPLAY_EXPORT_SAFETY.md"
+      - "Scripts/validate_replay_export_patch.py"
+      - "patches/replay-export-v1.patch"
+
+jobs:
+  validate:
+    name: Compile and test without distribution signing
+    runs-on: macos-26
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Validate patch boundary
+        run: python3 Scripts/validate_replay_export_patch.py
+
+      - name: Apply promoted patch
+        run: git apply patches/replay-export-v1.patch --whitespace=fix
+
+      - name: Verify applied production diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C NightscoutService diff --check
+          changed_files="$(git -C NightscoutService diff --name-only | sort)"
+          expected_files=$'NightscoutServiceKit/Extensions/StoredDosingDecision.swift\nNightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift'
+          test "$changed_files" = "$expected_files"
+
+      - name: Select simulator
+        id: simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          device_id="$(
+            xcrun simctl list devices available -j |
+              python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(d["udid"] for devices in data["devices"].values() for d in devices if d["name"].startswith("iPhone")))'
+          )"
+          echo "device_id=$device_id" >> "$GITHUB_OUTPUT"
+
+      - name: Test Nightscout replay serialization
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -workspace LoopWorkspace.xcworkspace \
+            -scheme NightscoutReplayValidation \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
+            -only-testing:NightscoutServiceKitTests/ReplayCaptureTestCase \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run LoopKit dose math regression tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -workspace LoopWorkspace.xcworkspace \
+            -scheme ReplayCoreRegression \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
+            -only-testing:LoopKitTests/DoseMathTests \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Compile Loop without signing
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -workspace LoopWorkspace.xcworkspace \
+            -scheme Loop \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify core repositories remain unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git -C Loop diff --name-only)"
+          test -z "$(git -C LoopKit diff --name-only)"
+
+      - name: Run Loop dosing regression tests
+        shell: bash
+        run: |
+          set -uo pipefail
+          result_bundle="$RUNNER_TEMP/LoopDosingRegression.xcresult"
+          test_log="$RUNNER_TEMP/loop-dosing-regression.log"
+          rm -rf "$result_bundle"
+
+          set +e
+          xcodebuild test \
+            -workspace LoopWorkspace.xcworkspace \
+            -scheme ReplayCoreRegression \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
+            -parallel-testing-enabled NO \
+            -retry-tests-on-failure \
+            -test-iterations 3 \
+            -resultBundlePath "$result_bundle" \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testForecastFromLiveCaptureInputData \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testFlatAndStable \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndStable \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndFalling \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndRisingWithCOB \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLowAndFallingWithCOB \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLowWithLowTreatment \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalDoesntCancelTempBasalIfHigher \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalCancelsTempBasalIfLower \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testOpenLoopCancelsTempBasal \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testReceivedUnreliableCGMReadingCancelsTempBasal \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLoopEnactsTempBasalWithoutManualBolusRecommendation \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testLoopRecommendsTempBasalWithoutEnactingIfOpenLoop \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testIsClosedLoopAvoidsTriggeringTempBasalCancelOnCreation \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testAutoBolusMaxIOBClamping \
+            -only-testing:LoopTests/LoopDataManagerDosingTests/testTempBasalMaxIOBClamping \
+            2>&1 | tee "$test_log"
+          test_status="${PIPESTATUS[0]}"
+          set -e
+
+          echo "## Loop dosing regression result" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "Test Case .* (passed|failed)|Executed [0-9]+ tests|Testing failed:|error:" "$test_log" |
+            tail -n 240 |
+            tee -a "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          if test -d "$result_bundle"; then
+            xcrun xcresulttool get test-results summary \
+              --path "$result_bundle" \
+              --format json > "$RUNNER_TEMP/loop-dosing-summary.json" || true
+          fi
+
+          exit "$test_status"
+
+      - name: Upload Loop dosing diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loop-dosing-regression-diagnostics
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/loop-dosing-*.log
+            ${{ runner.temp }}/loop-dosing-*.json
