@@ -27,11 +27,11 @@ LoopKit dose-math tests and LoopDataManager dosing tests without changing
 either test target or the normal Loop scheme.
 
 The workflow explicitly selects sixteen safety-relevant LoopDataManager tests.
-Each runs in a separate test-host invocation with up to three attempts. This
-prevents the tests' hard-coded one-second asynchronous expectations from
-failing because an earlier test overloaded or crashed the shared host. Every
-selected test must complete successfully in at least one isolated attempt;
-otherwise validation fails.
+Xcode runs the suite serially and retries only failed cases, up to three total
+iterations. Failed-test retries relaunch the test host, preventing the tests'
+hard-coded one-second asynchronous expectations from being permanently failed
+by transient hosted-runner scheduling. Every selected test must complete
+successfully within those bounded iterations; otherwise validation fails.
 
 Manual-bolus recommendation tests and the settings-notification test are
 excluded because their one-second asynchronous expectations are
