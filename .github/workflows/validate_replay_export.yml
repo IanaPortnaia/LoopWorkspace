@@ -90,61 +90,30 @@ jobs:
           test -z "$(git -C Loop diff --name-only)"
           test -z "$(git -C LoopKit diff --name-only)"
 
-      - name: Run Loop dosing regression tests
-        run: |
-          set -uo pipefail
-          result_bundle="$RUNNER_TEMP/LoopDosingRegression.xcresult"
-          test_log="$RUNNER_TEMP/loop-dosing-regression.log"
-          rm -rf "$result_bundle"
-
-          set +e
-          xcodebuild test \
-            -workspace LoopWorkspace.xcworkspace \
-            -scheme ReplayCoreRegression \
-            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
-            -resultBundlePath "$result_bundle" \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testForecastFromLiveCaptureInputData \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testFlatAndStable \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndStable \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndFalling \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testHighAndRisingWithCOB \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testLowAndFallingWithCOB \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testLowWithLowTreatment \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalDoesntCancelTempBasalIfHigher \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalCancelsTempBasalIfLower \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testOpenLoopCancelsTempBasal \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testReceivedUnreliableCGMReadingCancelsTempBasal \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testIsClosedLoopAvoidsTriggeringTempBasalCancelOnCreation \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testAutoBolusMaxIOBClamping \
-            -only-testing:LoopTests/LoopDataManagerDosingTests/testTempBasalMaxIOBClamping \
-            2>&1 | tee "$test_log"
-          test_status="${PIPESTATUS[0]}"
-          set -e
-
-          echo "## Loop dosing regression result" >> "$GITHUB_STEP_SUMMARY"
-          echo '```text' >> "$GITHUB_STEP_SUMMARY"
-          grep -E "Test Case .* (passed|failed)|Executed [0-9]+ tests|Testing failed:|error:" "$test_log" |
-            tail -n 200 |
-            tee -a "$GITHUB_STEP_SUMMARY" || true
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-          if test -d "$result_bundle"; then
-            xcrun xcresulttool get test-results summary \
-              --path "$result_bundle" \
-              --format json > "$RUNNER_TEMP/loop-dosing-summary.json" || true
-          fi
-
-          exit "$test_status"
-
-      - name: Run isolated temp-basal enactment tests
+      - name: Run isolated Loop dosing regression tests
         shell: bash
         run: |
           set -uo pipefail
           tests=(
+            "LoopTests/LoopDataManagerDosingTests/testForecastFromLiveCaptureInputData"
+            "LoopTests/LoopDataManagerDosingTests/testFlatAndStable"
+            "LoopTests/LoopDataManagerDosingTests/testHighAndStable"
+            "LoopTests/LoopDataManagerDosingTests/testHighAndFalling"
+            "LoopTests/LoopDataManagerDosingTests/testHighAndRisingWithCOB"
+            "LoopTests/LoopDataManagerDosingTests/testLowAndFallingWithCOB"
+            "LoopTests/LoopDataManagerDosingTests/testLowWithLowTreatment"
+            "LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalDoesntCancelTempBasalIfHigher"
+            "LoopTests/LoopDataManagerDosingTests/testValidateMaxTempBasalCancelsTempBasalIfLower"
+            "LoopTests/LoopDataManagerDosingTests/testOpenLoopCancelsTempBasal"
+            "LoopTests/LoopDataManagerDosingTests/testReceivedUnreliableCGMReadingCancelsTempBasal"
             "LoopTests/LoopDataManagerDosingTests/testLoopEnactsTempBasalWithoutManualBolusRecommendation"
             "LoopTests/LoopDataManagerDosingTests/testLoopRecommendsTempBasalWithoutEnactingIfOpenLoop"
+            "LoopTests/LoopDataManagerDosingTests/testIsClosedLoopAvoidsTriggeringTempBasalCancelOnCreation"
+            "LoopTests/LoopDataManagerDosingTests/testAutoBolusMaxIOBClamping"
+            "LoopTests/LoopDataManagerDosingTests/testTempBasalMaxIOBClamping"
           )
           failures=()
+          passed_tests=()
 
           for test_identifier in "${tests[@]}"; do
             test_name="${test_identifier##*/}"
@@ -167,6 +136,7 @@ jobs:
 
               if test "$test_status" -eq 0; then
                 passed=true
+                passed_tests+=("${test_name}:attempt-${attempt}")
                 break
               fi
             done
@@ -176,9 +146,10 @@ jobs:
             fi
           done
 
-          echo "## Isolated temp-basal enactment tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Isolated Loop dosing regression tests" >> "$GITHUB_STEP_SUMMARY"
+          printf -- '- `%s`\n' "${passed_tests[@]}" >> "$GITHUB_STEP_SUMMARY"
           if test "${#failures[@]}" -eq 0; then
-            echo "Both one-second asynchronous tests completed successfully." >> "$GITHUB_STEP_SUMMARY"
+            echo "All sixteen selected tests completed successfully." >> "$GITHUB_STEP_SUMMARY"
           else
             printf 'Failed after three isolated attempts: `%s`\n' "${failures[*]}" >> "$GITHUB_STEP_SUMMARY"
             exit 1

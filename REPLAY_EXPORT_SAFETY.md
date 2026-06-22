@@ -27,11 +27,11 @@ LoopKit dose-math tests and LoopDataManager dosing tests without changing
 either test target or the normal Loop scheme.
 
 The workflow explicitly selects sixteen safety-relevant LoopDataManager tests.
-Fourteen deterministic tests run as one regression group. Two temp-basal
-enactment tests contain hard-coded one-second asynchronous expectations; each
-runs separately with up to three fresh test-host attempts so hosted-runner
-scheduling does not prevent its dosing assertions from executing. A test that
-does not complete successfully in any attempt still fails validation.
+Each runs in a separate test-host invocation with up to three attempts. This
+prevents the tests' hard-coded one-second asynchronous expectations from
+failing because an earlier test overloaded or crashed the shared host. Every
+selected test must complete successfully in at least one isolated attempt;
+otherwise validation fails.
 
 Manual-bolus recommendation tests and the settings-notification test are
 excluded because their one-second asynchronous expectations are
