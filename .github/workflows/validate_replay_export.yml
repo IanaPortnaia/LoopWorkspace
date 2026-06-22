@@ -80,7 +80,7 @@ jobs:
           xcodebuild build \
             -workspace LoopWorkspace.xcworkspace \
             -scheme Loop \
-            -destination "generic/platform=iOS Simulator" \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Verify core repositories remain unchanged
