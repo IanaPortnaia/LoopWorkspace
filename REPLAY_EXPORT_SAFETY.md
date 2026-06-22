@@ -27,12 +27,18 @@ LoopKit dose-math tests and LoopDataManager dosing tests without changing
 either test target or the normal Loop scheme.
 
 The workflow explicitly selects sixteen safety-relevant LoopDataManager tests.
-It excludes manual-bolus recommendation tests and the settings-notification
-test because their one-second asynchronous expectations are nondeterministic
-on the hosted runner. They do not exercise automatic dosing or Nightscout
-serialization. The selected tests cover automatic bolus, temp basal, IOB
-limits, prediction fixtures, open-loop behavior, low-glucose handling, and
-unreliable CGM handling.
+Fourteen deterministic tests run as one regression group. Two temp-basal
+enactment tests contain hard-coded one-second asynchronous expectations; each
+runs separately with up to three fresh test-host attempts so hosted-runner
+scheduling does not prevent its dosing assertions from executing. A test that
+does not complete successfully in any attempt still fails validation.
+
+Manual-bolus recommendation tests and the settings-notification test are
+excluded because their one-second asynchronous expectations are
+nondeterministic on the hosted runner. They do not exercise automatic dosing
+or Nightscout serialization. The selected tests cover automatic bolus, temp
+basal, IOB limits, prediction fixtures, open-loop behavior, low-glucose
+handling, and unreliable CGM handling.
 
 The patch reads an already completed `.loop` `StoredDosingDecision` while
 Nightscout device-status JSON is being created. It adds
