@@ -1,96 +1,92 @@
-# Replay Export V1 Safety Boundary
+# Replay Export V2 Safety Boundary
 
 ## Pinned Source
 
-- LoopWorkspace: `a2b527d5cde65fc693225702e9aa056fad3e9841`
-- Loop: `40ae514ef2cb6ee8cf0a62177de3072a460ee2e4`
+- Loop: `1f71ec4fa94941abdbd72fd5bd914770faa2e90b`
 - LoopKit: `e7e2ee2b546c4d8122014838cb98a0e26dd91208`
 - NightscoutService: `7721a8da0de4f69fbc6994bdaa5c860ba9a99ede`
-- NightscoutKit package: `ca8e2cea82ab465282cd180ce01d64c1cf25478d`
+
+## Purpose
+
+V2 adds the component timelines needed to determine why the Python replay
+differs from the prediction Loop actually used for dosing. The export remains
+diagnostic only and is stored under `loop.testingDetails.replayCapture`.
 
 ## Runtime Boundary
 
-V1 production code modifies only:
+Production changes are limited to:
 
-`NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift`
+1. An optional Codable `ReplayPredictionEffects` field on
+   `StoredDosingDecision`.
+2. One assignment in `LoopDataManager` after both the dosing prediction and
+   pending-insulin prediction have already completed.
+3. Nightscout serialization of the stored diagnostic field.
 
-The patch also adds assertions to the existing NightscoutService test target in:
+The component assignment copies existing calculation results:
 
-`NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift`
+- insulin effect used by the dosing prediction
+- carb effect
+- momentum effect
+- retrospective correction effect
+- enabled prediction-effect bitmask
 
-The feature branch adds a validation-only workspace scheme named
-`NightscoutReplayValidation`. It references the existing NightscoutService
-framework and unit-test targets and is not used by the normal Loop build.
+The assignment is deliberately after both calls to `predictGlucose`. The
+recommendation is then calculated from the existing local `predictedGlucose`
+value, not from the diagnostic payload.
 
-`ReplayCoreRegression` is also validation-only. It exposes the existing
-LoopKit dose-math tests and LoopDataManager dosing tests without changing
-either test target or the normal Loop scheme.
+V2 does not modify:
 
-The workflow explicitly selects sixteen safety-relevant LoopDataManager tests.
-Xcode runs the suite serially and retries only failed cases, up to three total
-iterations. Failed-test retries relaunch the test host, preventing the tests'
-hard-coded one-second asynchronous expectations from being permanently failed
-by transient hosted-runner scheduling. Every selected test must complete
-successfully within those bounded iterations; otherwise validation fails.
-
-Manual-bolus recommendation tests and the settings-notification test are
-excluded because their one-second asynchronous expectations are
-nondeterministic on the hosted runner. They do not exercise automatic dosing
-or Nightscout serialization. The selected tests cover automatic bolus, temp
-basal, IOB limits, prediction fixtures, open-loop behavior, low-glucose
-handling, and unreliable CGM handling.
-
-The patch reads an already completed `.loop` `StoredDosingDecision` while
-Nightscout device-status JSON is being created. It adds
-`loop.testingDetails.replayCapture`.
-
-It does not modify:
-
-- `LoopDataManager`
 - `LoopMath`
-- `DoseMath`
-- automatic-dose recommendation generation
-- temp-basal or bolus enactment
-- pump communication
-- LoopKit persistence models
+- insulin, carb, momentum, or retrospective-correction calculations
+- automatic-dose or temp-basal recommendation functions
+- correction targets, suspend threshold, or delivery limits
+- dose enactment
+- pump or CGM communication
+
+## Persistence Compatibility
+
+`replayPredictionEffects` is optional and decoded with `decodeIfPresent`.
+Existing stored decisions therefore remain readable. Decisions created by code
+without V2 omit the field and preserve their prior encoded representation.
 
 ## Failure Behavior
 
-Capture construction is non-throwing and optional. If no completed `.loop`
-decision is paired with the status upload, `testingDetails` remains absent.
-Nightscout upload failures retain the existing NightscoutService behavior and
-cannot propagate into Loop prediction or dose enactment.
+The diagnostic value uses non-throwing struct construction from arrays already
+held by `LoopDataManager`. Nightscout capture construction remains optional.
+If the diagnostic field is absent, V1-compatible prediction, recommendation,
+glucose history, IOB, and COB fields are still exported.
 
-## Exported V1 Data
+Nightscout upload failures retain existing service behavior and cannot
+propagate into prediction, recommendation, or dose enactment.
 
-- status and loop-decision timestamps and UUIDs
-- exact pre-command dosing prediction stored by Loop
-- exact automatic-dose recommendation stored by Loop
-- the two-hour glucose history available locally for that decision
-- IOB and COB
-- settings UUID
-- warning and error identifiers
+## Data Volume
+
+V2 exports the four component timelines that directly form the dosing
+prediction. It intentionally omits both the separate pending-insulin timeline
+and the long insulin-counteraction history. Counteraction velocities affect
+carb and retrospective calculations upstream, but they do not enter
+`LoopMath.predictGlucose` directly. They can be added in a later schema only if
+component comparison shows that the carb or retrospective source needs deeper
+instrumentation.
 
 ## Required Validation
 
 Before installation:
 
-1. Run `python3 Scripts/validate_replay_export_patch.py`.
-2. Run the `Validate Replay Export` workflow. It applies the promoted patch only
-   inside its disposable runner and does not archive or distribution-sign an
-   application. The hosted Loop tests use normal local simulator signing so
-   the test host retains its required Siri entitlement.
-3. Run Loop, LoopKit, and NightscoutService tests.
-4. Confirm a release build succeeds without changing signing configuration.
-5. Compare an unmodified and instrumented build using identical Loop dosing
-   fixtures; predictions and recommendations must be byte-for-byte equivalent.
-6. Install only after the exported JSON has been inspected from a non-dosing
-   test or simulator environment.
+1. Run `python Scripts/validate_replay_export_patch.py`.
+2. Run the `Validate Replay Export` workflow with Xcode 26.4.
+3. Require the Nightscout serialization test and replay-effect Codable test to
+   pass.
+4. Require LoopKit dose-math tests and selected LoopDataManager dosing tests to
+   pass.
+5. Require an unsigned simulator build of Loop to compile.
+6. Confirm a release build succeeds without signing changes.
+7. Inspect several V2 Nightscout records and measure payload size before
+   extended use.
 
-No static review can provide absolute assurance. Installation remains blocked
-until compilation and behavioral-equivalence tests pass.
+The validator rejects unexpected files, removals from Loop or LoopKit
+production code, and additions containing recommendation or enactment symbols.
+The promoted patch is `patches/replay-export-v2.patch`.
 
-The validated patch is stored as `patches/replay-export-v1.patch`. The normal
-build workflow will apply it after this pull request is merged. Merging does
-not itself start a build; signed archive and TestFlight upload remain separate
-manual or scheduled workflow actions.
+No static review can prove absolute safety. Installation remains contingent on
+the compile and regression workflow passing.
