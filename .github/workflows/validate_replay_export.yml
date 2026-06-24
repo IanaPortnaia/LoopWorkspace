@@ -9,7 +9,7 @@ on:
       - "LoopWorkspace.xcworkspace/xcshareddata/xcschemes/ReplayCoreRegression.xcscheme"
       - "REPLAY_EXPORT_SAFETY.md"
       - "Scripts/validate_replay_export_patch.py"
-      - "patches/replay-export-v1.patch"
+      - "patches/replay-export-v2.patch"
 
 jobs:
   validate:
@@ -32,16 +32,21 @@ jobs:
         run: python3 Scripts/validate_replay_export_patch.py
 
       - name: Apply promoted patch
-        run: git apply patches/replay-export-v1.patch --whitespace=fix
+        run: git apply patches/replay-export-v2.patch --whitespace=fix
 
       - name: Verify applied production diff
         shell: bash
         run: |
           set -euo pipefail
+          git -C Loop diff --check
+          git -C LoopKit diff --check
           git -C NightscoutService diff --check
-          changed_files="$(git -C NightscoutService diff --name-only | sort)"
-          expected_files=$'NightscoutServiceKit/Extensions/StoredDosingDecision.swift\nNightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift'
-          test "$changed_files" = "$expected_files"
+          loop_files="$(git -C Loop diff --name-only | sort)"
+          loopkit_files="$(git -C LoopKit diff --name-only | sort)"
+          nightscout_files="$(git -C NightscoutService diff --name-only | sort)"
+          test "$loop_files" = "Loop/Managers/LoopDataManager.swift"
+          test "$loopkit_files" = $'LoopKit/DosingDecisionStore.swift\nLoopKitTests/DosingDecisionStoreTests.swift'
+          test "$nightscout_files" = $'NightscoutServiceKit/Extensions/StoredDosingDecision.swift\nNightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift'
 
       - name: Select simulator
         id: simulator
@@ -74,6 +79,16 @@ jobs:
             -only-testing:LoopKitTests/DoseMathTests \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Test replay effect persistence
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -workspace LoopWorkspace.xcworkspace \
+            -scheme ReplayCoreRegression \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
+            -only-testing:LoopKitTests/StoredDosingDecisionCodableTests/testReplayPredictionEffectsCodable \
+            CODE_SIGNING_ALLOWED=NO
+
       - name: Compile Loop without signing
         run: |
           set -o pipefail
@@ -82,13 +97,6 @@ jobs:
             -scheme Loop \
             -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.device_id }}" \
             CODE_SIGNING_ALLOWED=NO
-
-      - name: Verify core repositories remain unchanged
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -z "$(git -C Loop diff --name-only)"
-          test -z "$(git -C LoopKit diff --name-only)"
 
       - name: Run Loop dosing regression tests
         shell: bash
