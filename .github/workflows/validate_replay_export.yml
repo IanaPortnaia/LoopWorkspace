@@ -9,7 +9,7 @@ on:
       - "LoopWorkspace.xcworkspace/xcshareddata/xcschemes/ReplayCoreRegression.xcscheme"
       - "REPLAY_EXPORT_SAFETY.md"
       - "Scripts/validate_replay_export_patch.py"
-      - "patches/replay-export-v2.patch"
+      - "patches/replay-export-v3.patch"
 
 jobs:
   validate:
@@ -32,7 +32,7 @@ jobs:
         run: python3 Scripts/validate_replay_export_patch.py
 
       - name: Apply promoted patch
-        run: git apply patches/replay-export-v2.patch --whitespace=fix
+        run: git apply patches/replay-export-v3.patch --whitespace=fix
 
       - name: Verify applied production diff
         shell: bash
@@ -44,7 +44,7 @@ jobs:
           loop_files="$(git -C Loop diff --name-only | sort)"
           loopkit_files="$(git -C LoopKit diff --name-only | sort)"
           nightscout_files="$(git -C NightscoutService diff --name-only | sort)"
-          test "$loop_files" = "Loop/Managers/LoopDataManager.swift"
+          test "$loop_files" = $'Loop/Managers/LoopDataManager.swift\nLoopTests/Managers/LoopDataManagerDosingTests.swift'
           test "$loopkit_files" = $'LoopKit/DosingDecisionStore.swift\nLoopKitTests/DosingDecisionStoreTests.swift'
           test "$nightscout_files" = $'NightscoutServiceKit/Extensions/StoredDosingDecision.swift\nNightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift'
 
