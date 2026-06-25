@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate that replay-export V2 remains outside Loop's control logic."""
+"""Validate that replay-export V3 remains outside Loop's control logic."""
 
 from pathlib import Path
 import re
@@ -8,11 +8,12 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PATCH = ROOT / "patches" / "replay-export-v2.patch"
+PATCH = ROOT / "patches" / "replay-export-v3.patch"
 ALLOWED_PATHS = {
     "LoopKit/LoopKit/DosingDecisionStore.swift",
     "LoopKit/LoopKitTests/DosingDecisionStoreTests.swift",
     "Loop/Loop/Managers/LoopDataManager.swift",
+    "Loop/LoopTests/Managers/LoopDataManagerDosingTests.swift",
     "NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift",
     "NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift",
 }
@@ -66,13 +67,20 @@ removed = changed_lines_by_path(text, "-")
 
 loop_manager_path = "Loop/Loop/Managers/LoopDataManager.swift"
 expected_loop_manager_additions = [
-    "dosingDecision.replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects(",
+    "if predictedGlucose == nil {",
+    "replayPredictionEffects = nil",
+    "}",
+    "private var replayPredictionEffects: StoredDosingDecision.ReplayPredictionEffects?",
+    "dosingDecision.replayPredictionEffects = replayPredictionEffects",
+    "let replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects(",
     "enabledEffectsRawValue: settings.enabledEffects.rawValue,",
     "insulin: insulinEffect ?? [],",
     "carbs: carbEffect ?? [],",
     "momentum: glucoseMomentumEffect ?? [],",
     "retrospection: retrospectiveGlucoseEffect",
     ")",
+    "self.replayPredictionEffects = replayPredictionEffects",
+    "dosingDecision.replayPredictionEffects = replayPredictionEffects",
 ]
 actual_loop_manager_additions = [
     line.strip() for line in added.get(loop_manager_path, []) if line.strip()
@@ -81,6 +89,21 @@ if actual_loop_manager_additions != expected_loop_manager_additions:
     fail(f"unexpected LoopDataManager additions: {actual_loop_manager_additions}")
 if removed.get(loop_manager_path):
     fail(f"LoopDataManager lines were removed: {removed[loop_manager_path]}")
+
+loop_manager_test_path = "Loop/LoopTests/Managers/LoopDataManagerDosingTests.swift"
+expected_loop_manager_test_additions = [
+    "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects)"
+]
+actual_loop_manager_test_additions = [
+    line.strip() for line in added.get(loop_manager_test_path, []) if line.strip()
+]
+if actual_loop_manager_test_additions != expected_loop_manager_test_additions:
+    fail(
+        "unexpected LoopDataManager dosing-test additions: "
+        f"{actual_loop_manager_test_additions}"
+    )
+if removed.get(loop_manager_test_path):
+    fail(f"LoopDataManager dosing-test lines were removed: {removed[loop_manager_test_path]}")
 
 loopkit_model_path = "LoopKit/LoopKit/DosingDecisionStore.swift"
 if removed.get(loopkit_model_path):
@@ -95,9 +118,11 @@ if removed.get(nightscout_path) != expected_nightscout_removal:
     fail(f"unexpected Nightscout production removals: {removed.get(nightscout_path)}")
 
 required_markers = [
-    '"schemaVersion": 2',
+    '"schemaVersion": 3',
     "ReplayPredictionEffects: Codable, Equatable",
-    "replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects",
+    "let replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects",
+    "dosingDecision.replayPredictionEffects = replayPredictionEffects",
+    "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects)",
     '"predictionEffects"',
     '"insulin"',
     '"retrospection"',
@@ -134,4 +159,4 @@ for submodule, expected_commit in EXPECTED_SUBMODULE_COMMITS.items():
         )
 
 run("git", "apply", "--check", "--whitespace=fix", str(PATCH))
-print("Replay-export V2 patch is confined to optional diagnostics after prediction computation.")
+print("Replay-export V3 patch preserves prediction components across Loop's cache path.")

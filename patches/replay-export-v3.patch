@@ -1,3 +1,62 @@
+diff --git a/Loop/Loop/Managers/LoopDataManager.swift b/Loop/Loop/Managers/LoopDataManager.swift
+index c9aef285..721a8ee0 100644
+--- a/Loop/Loop/Managers/LoopDataManager.swift
++++ b/Loop/Loop/Managers/LoopDataManager.swift
+@@ -395,11 +395,16 @@ final class LoopDataManager {
+         didSet {
+             recommendedAutomaticDose = nil
+             predictedGlucoseIncludingPendingInsulin = nil
++            if predictedGlucose == nil {
++                replayPredictionEffects = nil
++            }
+         }
+     }
+ 
+     fileprivate var predictedGlucoseIncludingPendingInsulin: [PredictedGlucoseValue]?
+ 
++    private var replayPredictionEffects: StoredDosingDecision.ReplayPredictionEffects?
++
+     private var recentCarbEntries: [StoredCarbEntry]?
+ 
+     fileprivate var recommendedAutomaticDose: (recommendation: AutomaticDoseRecommendation, date: Date)?
+@@ -1162,6 +1167,7 @@ extension LoopDataManager {
+ 
+         // These will be updated by updatePredictedGlucoseAndRecommendedDose, if possible
+         dosingDecision.predictedGlucose = predictedGlucoseIncludingPendingInsulin
++        dosingDecision.replayPredictionEffects = replayPredictionEffects
+         dosingDecision.automaticDoseRecommendation = recommendedAutomaticDose?.recommendation
+ 
+         // If the glucose prediction hasn't changed, then nothing has changed, so just use pre-existing recommendations
+@@ -1785,7 +1791,17 @@ extension LoopDataManager {
+             let predictedGlucoseIncludingPendingInsulin = try predictGlucose(using: settings.enabledEffects, includingPendingInsulin: true)
+             self.predictedGlucoseIncludingPendingInsulin = predictedGlucoseIncludingPendingInsulin
+ 
++            let replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects(
++                enabledEffectsRawValue: settings.enabledEffects.rawValue,
++                insulin: insulinEffect ?? [],
++                carbs: carbEffect ?? [],
++                momentum: glucoseMomentumEffect ?? [],
++                retrospection: retrospectiveGlucoseEffect
++            )
++            self.replayPredictionEffects = replayPredictionEffects
++
+             dosingDecision.predictedGlucose = predictedGlucose
++            dosingDecision.replayPredictionEffects = replayPredictionEffects
+ 
+             guard lastRequestedBolus == nil
+             else {
+diff --git a/Loop/LoopTests/Managers/LoopDataManagerDosingTests.swift b/Loop/LoopTests/Managers/LoopDataManagerDosingTests.swift
+index a1f26a0e..8baaf026 100644
+--- a/Loop/LoopTests/Managers/LoopDataManagerDosingTests.swift
++++ b/Loop/LoopTests/Managers/LoopDataManagerDosingTests.swift
+@@ -450,6 +450,7 @@ class LoopDataManagerDosingTests: LoopDataManagerTests {
+             XCTAssertEqual(dosingDecisionStore.dosingDecisions[0].automaticDoseRecommendation, expectedAutomaticDoseRecommendation)
+             XCTAssertNil(dosingDecisionStore.dosingDecisions[0].manualBolusRecommendation)
+             XCTAssertNil(dosingDecisionStore.dosingDecisions[0].manualBolusRequested)
++            XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects)
+         }
+         NotificationCenter.default.removeObserver(observer)
+     }
 diff --git a/LoopKit/LoopKit/DosingDecisionStore.swift b/LoopKit/LoopKit/DosingDecisionStore.swift
 index 7d91b59..e7a0f82 100644
 --- a/LoopKit/LoopKit/DosingDecisionStore.swift
@@ -121,26 +180,8 @@ index dc9846e..8baa017 100644
              lhs.automaticDoseRecommendation == rhs.automaticDoseRecommendation &&
              lhs.manualBolusRecommendation == rhs.manualBolusRecommendation &&
              lhs.manualBolusRequested == rhs.manualBolusRequested &&
-diff --git a/Loop/Loop/Managers/LoopDataManager.swift b/Loop/Loop/Managers/LoopDataManager.swift
-index c9aef285..a47a7f9a 100644
---- a/Loop/Loop/Managers/LoopDataManager.swift
-+++ b/Loop/Loop/Managers/LoopDataManager.swift
-@@ -1786,6 +1786,13 @@ extension LoopDataManager {
-             self.predictedGlucoseIncludingPendingInsulin = predictedGlucoseIncludingPendingInsulin
- 
-             dosingDecision.predictedGlucose = predictedGlucose
-+            dosingDecision.replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects(
-+                enabledEffectsRawValue: settings.enabledEffects.rawValue,
-+                insulin: insulinEffect ?? [],
-+                carbs: carbEffect ?? [],
-+                momentum: glucoseMomentumEffect ?? [],
-+                retrospection: retrospectiveGlucoseEffect
-+            )
- 
-             guard lastRequestedBolus == nil
-             else {
 diff --git a/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift b/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift
-index aba4104..c7a8daa 100644
+index aba4104..0593ade 100644
 --- a/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift
 +++ b/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift
 @@ -53,6 +53,94 @@ extension StoredDosingDecision {
@@ -196,7 +237,7 @@ index aba4104..c7a8daa 100644
 +
 +        let formatter = ISO8601DateFormatter()
 +        var capture: [String: Any] = [
-+            "schemaVersion": 2,
++            "schemaVersion": 3,
 +            "captureRole": "completedLoopDecision",
 +            "statusDecisionSyncIdentifier": syncIdentifier.uuidString,
 +            "statusDecisionReason": reason,
@@ -253,7 +294,7 @@ index aba4104..c7a8daa 100644
  
  extension StoredDosingDecision.Issue {
 diff --git a/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift b/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift
-index 95a6998..46effc8 100644
+index 95a6998..6aaaff6 100644
 --- a/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift
 +++ b/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift
 @@ -6,6 +6,8 @@
@@ -339,7 +380,7 @@ index 95a6998..46effc8 100644
 +        XCTAssertTrue(JSONSerialization.isValidJSONObject(dictionary))
 +        XCTAssertLessThan(try JSONSerialization.data(withJSONObject: dictionary).count, 20_000)
 +        let capture = try XCTUnwrap(dictionary["replayCapture"] as? [String: Any])
-+        XCTAssertEqual(capture["schemaVersion"] as? Int, 2)
++        XCTAssertEqual(capture["schemaVersion"] as? Int, 3)
 +        XCTAssertEqual(capture["captureRole"] as? String, "completedLoopDecision")
 +        XCTAssertEqual(capture["loopDecisionSyncIdentifier"] as? String, loopIdentifier.uuidString)
 +        XCTAssertEqual(capture["statusDecisionSyncIdentifier"] as? String, statusIdentifier.uuidString)
