@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate that replay-export V3 remains outside Loop's control logic."""
+"""Validate that replay-export V4 remains outside Loop's control logic."""
 
 from pathlib import Path
 import re
@@ -8,7 +8,7 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PATCH = ROOT / "patches" / "replay-export-v3.patch"
+PATCH = ROOT / "patches" / "replay-export-v4.patch"
 ALLOWED_PATHS = {
     "LoopKit/LoopKit/DosingDecisionStore.swift",
     "LoopKit/LoopKitTests/DosingDecisionStoreTests.swift",
@@ -74,6 +74,7 @@ expected_loop_manager_additions = [
     "dosingDecision.replayPredictionEffects = replayPredictionEffects",
     "let replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects(",
     "enabledEffectsRawValue: settings.enabledEffects.rawValue,",
+    "prediction: predictedGlucose,",
     "insulin: insulinEffect ?? [],",
     "carbs: carbEffect ?? [],",
     "momentum: glucoseMomentumEffect ?? [],",
@@ -92,7 +93,8 @@ if removed.get(loop_manager_path):
 
 loop_manager_test_path = "Loop/LoopTests/Managers/LoopDataManagerDosingTests.swift"
 expected_loop_manager_test_additions = [
-    "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects)"
+    "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects)",
+    "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects?.prediction)",
 ]
 actual_loop_manager_test_additions = [
     line.strip() for line in added.get(loop_manager_test_path, []) if line.strip()
@@ -118,11 +120,16 @@ if removed.get(nightscout_path) != expected_nightscout_removal:
     fail(f"unexpected Nightscout production removals: {removed.get(nightscout_path)}")
 
 required_markers = [
-    '"schemaVersion": 3',
+    '"schemaVersion": 4',
     "ReplayPredictionEffects: Codable, Equatable",
+    "public let prediction: [PredictedGlucoseValue]?",
     "let replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects",
+    "prediction: predictedGlucose",
+    "prediction: diagnosticPrediction",
+    "replayPredictionEffects?.prediction ?? predictedGlucose",
     "dosingDecision.replayPredictionEffects = replayPredictionEffects",
     "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects)",
+    "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects?.prediction)",
     '"predictionEffects"',
     '"insulin"',
     '"retrospection"',
@@ -159,4 +166,4 @@ for submodule, expected_commit in EXPECTED_SUBMODULE_COMMITS.items():
         )
 
 run("git", "apply", "--check", "--whitespace=fix", str(PATCH))
-print("Replay-export V3 patch preserves prediction components across Loop's cache path.")
+print("Replay-export V4 patch preserves prediction components and the exact diagnostic dosing prediction across Loop's cache path.")
