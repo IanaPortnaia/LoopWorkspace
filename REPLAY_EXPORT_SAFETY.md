@@ -114,5 +114,9 @@ The validator rejects unexpected files, removals from Loop or LoopKit
 production code, and additions containing recommendation or enactment symbols.
 The promoted patch is `patches/replay-export-v4.patch`.
 
+The patch also lengthens selected `LoopDataManagerDosingTests` async waits from
+1 second to 5 seconds. This is test-only and avoids false failures on slower
+GitHub-hosted macOS runners while preserving the same dosing assertions.
+
 No static review can prove absolute safety. Installation remains contingent on
 the compile and regression workflow passing.

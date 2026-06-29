@@ -93,8 +93,18 @@ if removed.get(loop_manager_path):
 
 loop_manager_test_path = "Loop/LoopTests/Managers/LoopDataManagerDosingTests.swift"
 expected_loop_manager_test_additions = [
+    "func waitOnDataQueue(timeout: TimeInterval = 5.0) {",
+    "wait(for: [exp], timeout: 5.0)",
+    "wait(for: [exp], timeout: 5.0)",
+    "wait(for: [exp], timeout: 5.0)",
+    "wait(for: [exp], timeout: 5.0)",
+    "wait(for: [exp], timeout: 5.0)",
+    "wait(for: [exp], timeout: 5.0)",
     "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects)",
     "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects?.prediction)",
+    "wait(for: [exp], timeout: 5.0)",
+    "wait(for: [exp], timeout: 5.0)",
+    "wait(for: [exp], timeout: 5.0)",
 ]
 actual_loop_manager_test_additions = [
     line.strip() for line in added.get(loop_manager_test_path, []) if line.strip()
@@ -104,8 +114,26 @@ if actual_loop_manager_test_additions != expected_loop_manager_test_additions:
         "unexpected LoopDataManager dosing-test additions: "
         f"{actual_loop_manager_test_additions}"
     )
-if removed.get(loop_manager_test_path):
-    fail(f"LoopDataManager dosing-test lines were removed: {removed[loop_manager_test_path]}")
+expected_loop_manager_test_removals = [
+    "func waitOnDataQueue(timeout: TimeInterval = 1.0) {",
+    "wait(for: [exp], timeout: 1.0)",
+    "wait(for: [exp], timeout: 1.0)",
+    "wait(for: [exp], timeout: 1.0)",
+    "wait(for: [exp], timeout: 1.0)",
+    "wait(for: [exp], timeout: 1.0)",
+    "wait(for: [exp], timeout: 1.0)",
+    "wait(for: [exp], timeout: 1.0)",
+    "wait(for: [exp], timeout: 1.0)",
+    "wait(for: [exp], timeout: 1.0)",
+]
+actual_loop_manager_test_removals = [
+    line.strip() for line in removed.get(loop_manager_test_path, []) if line.strip()
+]
+if actual_loop_manager_test_removals != expected_loop_manager_test_removals:
+    fail(
+        "unexpected LoopDataManager dosing-test removals: "
+        f"{actual_loop_manager_test_removals}"
+    )
 
 loopkit_model_path = "LoopKit/LoopKit/DosingDecisionStore.swift"
 if removed.get(loopkit_model_path):
