@@ -1,14 +1,12 @@
 diff --git a/Loop/Loop/Managers/LoopDataManager.swift b/Loop/Loop/Managers/LoopDataManager.swift
-index c9aef285..89b3629c 100644
+index c9aef285..bd3a2cf1 100644
 --- a/Loop/Loop/Managers/LoopDataManager.swift
 +++ b/Loop/Loop/Managers/LoopDataManager.swift
-@@ -395,11 +395,16 @@ final class LoopDataManager {
+@@ -395,11 +395,14 @@ final class LoopDataManager {
          didSet {
              recommendedAutomaticDose = nil
              predictedGlucoseIncludingPendingInsulin = nil
-+            if predictedGlucose == nil {
-+                replayPredictionEffects = nil
-+            }
++            replayPredictionEffects = nil
          }
      }
  
@@ -19,7 +17,7 @@ index c9aef285..89b3629c 100644
      private var recentCarbEntries: [StoredCarbEntry]?
  
      fileprivate var recommendedAutomaticDose: (recommendation: AutomaticDoseRecommendation, date: Date)?
-@@ -1162,6 +1167,7 @@ extension LoopDataManager {
+@@ -1162,6 +1165,7 @@ extension LoopDataManager {
  
          // These will be updated by updatePredictedGlucoseAndRecommendedDose, if possible
          dosingDecision.predictedGlucose = predictedGlucoseIncludingPendingInsulin
@@ -27,7 +25,7 @@ index c9aef285..89b3629c 100644
          dosingDecision.automaticDoseRecommendation = recommendedAutomaticDose?.recommendation
  
          // If the glucose prediction hasn't changed, then nothing has changed, so just use pre-existing recommendations
-@@ -1785,7 +1791,18 @@ extension LoopDataManager {
+@@ -1785,7 +1789,18 @@ extension LoopDataManager {
              let predictedGlucoseIncludingPendingInsulin = try predictGlucose(using: settings.enabledEffects, includingPendingInsulin: true)
              self.predictedGlucoseIncludingPendingInsulin = predictedGlucoseIncludingPendingInsulin
  

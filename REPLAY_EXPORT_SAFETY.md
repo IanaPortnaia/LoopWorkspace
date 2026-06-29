@@ -33,8 +33,8 @@ Production changes are limited to:
    prediction and pending-insulin prediction have completed.
 3. Copying that cached diagnostic value into each new stored decision alongside
    the cached prediction.
-4. Clearing the diagnostic cache whenever the associated prediction is
-   invalidated.
+4. Clearing the diagnostic cache whenever the associated prediction changes, so
+   stale replay effects cannot survive a later partial prediction failure.
 5. Nightscout serialization of the stored diagnostic field.
 6. Preferential Nightscout replay export of the diagnostic dosing prediction
    when it is available, with fallback to the prior stored prediction for older

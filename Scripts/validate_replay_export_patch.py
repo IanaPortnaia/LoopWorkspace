@@ -67,9 +67,7 @@ removed = changed_lines_by_path(text, "-")
 
 loop_manager_path = "Loop/Loop/Managers/LoopDataManager.swift"
 expected_loop_manager_additions = [
-    "if predictedGlucose == nil {",
     "replayPredictionEffects = nil",
-    "}",
     "private var replayPredictionEffects: StoredDosingDecision.ReplayPredictionEffects?",
     "dosingDecision.replayPredictionEffects = replayPredictionEffects",
     "let replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects(",
