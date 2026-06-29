@@ -1,4 +1,4 @@
-# Replay Export V3 Safety Boundary
+# Replay Export V4 Safety Boundary
 
 ## Pinned Source
 
@@ -8,15 +8,20 @@
 
 ## Purpose
 
-V3 adds the component timelines needed to determine why the Python replay
+V4 exports the component timelines needed to determine why the Python replay
 differs from the prediction Loop actually used for dosing. The export remains
 diagnostic only and is stored under `loop.testingDetails.replayCapture`.
 
-V3 corrects the incomplete V2 lifecycle behavior. V2 attached component
+V3 corrected the incomplete V2 lifecycle behavior. V2 attached component
 timelines only when `LoopDataManager` calculated a fresh prediction. In normal
 operation, a status update can calculate and cache the prediction immediately
 before the dosing loop. The dosing loop then reuses the cached prediction, and
 the V2 stored decision omitted its component timelines.
+
+V4 additionally stores the exact non-pending dosing prediction inside the same
+diagnostic object as the component timelines. This avoids conflating Loop's
+existing stored status prediction, which may include pending insulin in cached
+cycles, with the prediction used to calculate the automatic dose.
 
 ## Runtime Boundary
 
@@ -28,9 +33,12 @@ Production changes are limited to:
    prediction and pending-insulin prediction have completed.
 3. Copying that cached diagnostic value into each new stored decision alongside
    the cached prediction.
-4. Clearing the diagnostic cache whenever the associated prediction is
-   invalidated.
+4. Clearing the diagnostic cache whenever the associated prediction changes, so
+   stale replay effects cannot survive a later partial prediction failure.
 5. Nightscout serialization of the stored diagnostic field.
+6. Preferential Nightscout replay export of the diagnostic dosing prediction
+   when it is available, with fallback to the prior stored prediction for older
+   records.
 
 The component assignment copies existing calculation results:
 
@@ -39,13 +47,14 @@ The component assignment copies existing calculation results:
 - momentum effect
 - retrospective correction effect
 - enabled prediction-effect bitmask
+- exact non-pending dosing prediction paired with those component timelines
 
 The cache assignment is deliberately after both calls to `predictGlucose`.
 The recommendation is then calculated from the existing local
 `predictedGlucose` value, not from the diagnostic payload. Cached effects are
 copied rather than reconstructed from potentially newer input arrays.
 
-V3 does not modify:
+V4 does not modify:
 
 - `LoopMath`
 - insulin, carb, momentum, or retrospective-correction calculations
@@ -58,7 +67,9 @@ V3 does not modify:
 
 `replayPredictionEffects` is optional and decoded with `decodeIfPresent`.
 Existing stored decisions therefore remain readable. Decisions created by code
-without V3 omit the field and preserve their prior encoded representation.
+without replay export omit the field and preserve their prior encoded
+representation. The nested diagnostic prediction is optional so V3 records
+without it still decode.
 
 ## Failure Behavior
 
@@ -72,10 +83,11 @@ propagate into prediction, recommendation, or dose enactment.
 
 ## Data Volume
 
-V3 exports the four component timelines that directly form the dosing
-prediction. It intentionally omits both the separate pending-insulin timeline
-and the long insulin-counteraction history. Counteraction velocities affect
-carb and retrospective calculations upstream, but they do not enter
+V4 exports the four component timelines that directly form the dosing
+prediction plus the exact non-pending prediction paired with those timelines.
+It intentionally omits both the separate pending-insulin timeline and the long
+insulin-counteraction history. Counteraction velocities affect carb and
+retrospective calculations upstream, but they do not enter
 `LoopMath.predictGlucose` directly. They can be added in a later schema only if
 component comparison shows that the carb or retrospective source needs deeper
 instrumentation.
@@ -95,12 +107,16 @@ Before installation:
    pass.
 6. Require an unsigned simulator build of Loop to compile.
 7. Confirm a release build succeeds without signing changes.
-8. Inspect several V3 Nightscout records and measure payload size before
+8. Inspect several V4 Nightscout records and measure payload size before
    extended use.
 
 The validator rejects unexpected files, removals from Loop or LoopKit
 production code, and additions containing recommendation or enactment symbols.
-The promoted patch is `patches/replay-export-v3.patch`.
+The promoted patch is `patches/replay-export-v4.patch`.
+
+The patch also lengthens selected `LoopDataManagerDosingTests` async waits from
+1 second to 5 seconds. This is test-only and avoids false failures on slower
+GitHub-hosted macOS runners while preserving the same dosing assertions.
 
 No static review can prove absolute safety. Installation remains contingent on
 the compile and regression workflow passing.
