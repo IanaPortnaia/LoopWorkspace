@@ -1,4 +1,4 @@
-# Replay Export V4 Safety Boundary
+# Replay Export Schema 5 Safety Boundary
 
 ## Pinned Source
 
@@ -8,9 +8,10 @@
 
 ## Purpose
 
-V4 exports the component timelines needed to determine why the Python replay
-differs from the prediction Loop actually used for dosing. The export remains
-diagnostic only and is stored under `loop.testingDetails.replayCapture`.
+Schema 5 exports the component timelines and intermediate discrepancy sources
+needed to determine why the Python replay differs from the prediction Loop
+actually used for dosing. The export remains diagnostic only and is stored
+under `loop.testingDetails.replayCapture`.
 
 V3 corrected the incomplete V2 lifecycle behavior. V2 attached component
 timelines only when `LoopDataManager` calculated a fresh prediction. In normal
@@ -22,6 +23,10 @@ V4 additionally stores the exact non-pending dosing prediction inside the same
 diagnostic object as the component timelines. This avoids conflating Loop's
 existing stored status prediction, which may include pending insulin in cached
 cycles, with the prediction used to calculate the automatic dose.
+
+Schema 5 extends that diagnostic object with the insulin-counteraction velocity
+timeline and summed retrospective glucose discrepancies used upstream by carb
+absorption and retrospective correction.
 
 ## Runtime Boundary
 
@@ -46,6 +51,8 @@ The component assignment copies existing calculation results:
 - carb effect
 - momentum effect
 - retrospective correction effect
+- insulin-counteraction velocities
+- summed retrospective glucose discrepancies
 - enabled prediction-effect bitmask
 - exact non-pending dosing prediction paired with those component timelines
 
@@ -54,7 +61,7 @@ The recommendation is then calculated from the existing local
 `predictedGlucose` value, not from the diagnostic payload. Cached effects are
 copied rather than reconstructed from potentially newer input arrays.
 
-V4 does not modify:
+Schema 5 does not modify:
 
 - `LoopMath`
 - insulin, carb, momentum, or retrospective-correction calculations
@@ -68,8 +75,8 @@ V4 does not modify:
 `replayPredictionEffects` is optional and decoded with `decodeIfPresent`.
 Existing stored decisions therefore remain readable. Decisions created by code
 without replay export omit the field and preserve their prior encoded
-representation. The nested diagnostic prediction is optional so V3 records
-without it still decode.
+representation. The nested diagnostic prediction and added Schema 5 diagnostic
+arrays are optional/defaulted so older records without them still decode.
 
 ## Failure Behavior
 
@@ -83,14 +90,11 @@ propagate into prediction, recommendation, or dose enactment.
 
 ## Data Volume
 
-V4 exports the four component timelines that directly form the dosing
-prediction plus the exact non-pending prediction paired with those timelines.
-It intentionally omits both the separate pending-insulin timeline and the long
-insulin-counteraction history. Counteraction velocities affect carb and
-retrospective calculations upstream, but they do not enter
-`LoopMath.predictGlucose` directly. They can be added in a later schema only if
-component comparison shows that the carb or retrospective source needs deeper
-instrumentation.
+Schema 5 exports the four component timelines that directly form the dosing
+prediction, the exact non-pending prediction paired with those timelines, and
+the upstream insulin-counteraction and retrospective-discrepancy timelines.
+It still omits the separate pending-insulin prediction timeline because that
+timeline is not used for automatic-dose calculation.
 
 ## Required Validation
 
@@ -107,7 +111,7 @@ Before installation:
    pass.
 6. Require an unsigned simulator build of Loop to compile.
 7. Confirm a release build succeeds without signing changes.
-8. Inspect several V4 Nightscout records and measure payload size before
+8. Inspect several Schema 5 Nightscout records and measure payload size before
    extended use.
 
 The validator rejects unexpected files, removals from Loop or LoopKit

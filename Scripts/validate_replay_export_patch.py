@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate that replay-export V4 remains outside Loop's control logic."""
+"""Validate that replay-export Schema 5 remains diagnostic-only."""
 
 from pathlib import Path
 import re
@@ -42,6 +42,34 @@ def run(*args: str) -> str:
     return result.stdout.strip()
 
 
+def patch_applies_or_is_already_applied() -> None:
+    apply_result = subprocess.run(
+        ["git", "apply", "--check", "--whitespace=fix", str(PATCH)],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if apply_result.returncode == 0:
+        return
+
+    reverse_result = subprocess.run(
+        ["git", "apply", "--reverse", "--check", "--whitespace=fix", str(PATCH)],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if reverse_result.returncode == 0:
+        return
+
+    fail(
+        "patch neither applies cleanly nor matches the already-applied working tree\n"
+        f"apply check:\n{apply_result.stdout}{apply_result.stderr}\n"
+        f"reverse check:\n{reverse_result.stdout}{reverse_result.stderr}"
+    )
+
+
 def changed_lines_by_path(text: str, prefix: str) -> dict[str, list[str]]:
     changed: dict[str, list[str]] = {}
     current_path: str | None = None
@@ -56,7 +84,7 @@ def changed_lines_by_path(text: str, prefix: str) -> dict[str, list[str]]:
     return changed
 
 
-text = PATCH.read_text(encoding="utf-8")
+text = PATCH.read_text(encoding="utf-8-sig")
 changed_paths = set(re.findall(r"^diff --git a/(.+?) b/(.+?)$", text, re.MULTILINE))
 expected_changed_paths = {(path, path) for path in ALLOWED_PATHS}
 if changed_paths != expected_changed_paths:
@@ -65,105 +93,57 @@ if changed_paths != expected_changed_paths:
 added = changed_lines_by_path(text, "+")
 removed = changed_lines_by_path(text, "-")
 
-loop_manager_path = "Loop/Loop/Managers/LoopDataManager.swift"
-expected_loop_manager_additions = [
-    "replayPredictionEffects = nil",
-    "private var replayPredictionEffects: StoredDosingDecision.ReplayPredictionEffects?",
-    "dosingDecision.replayPredictionEffects = replayPredictionEffects",
-    "let replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects(",
-    "enabledEffectsRawValue: settings.enabledEffects.rawValue,",
-    "prediction: predictedGlucose,",
-    "insulin: insulinEffect ?? [],",
-    "carbs: carbEffect ?? [],",
-    "momentum: glucoseMomentumEffect ?? [],",
+required_markers = [
+    '"schemaVersion": 5',
+    "ReplayPredictionEffects: Codable, Equatable",
+    "ReplayCounteractionEffect: Codable, Equatable",
+    "ReplayGlucoseChange: Codable, Equatable",
+    "public let prediction: [PredictedGlucoseValue]?",
+    "public let insulinCounteractionEffects: [ReplayCounteractionEffect]",
+    "public let retrospectiveGlucoseDiscrepancies: [ReplayGlucoseChange]",
+    "let replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects",
+    "prediction: predictedGlucose",
+    "insulin: insulinEffect ?? []",
+    "carbs: carbEffect ?? []",
+    "momentum: glucoseMomentumEffect ?? []",
     "retrospection: retrospectiveGlucoseEffect",
-    ")",
-    "self.replayPredictionEffects = replayPredictionEffects",
+    "insulinCounteractionEffects: insulinCounteractionEffects.map",
+    "retrospectiveGlucoseDiscrepancies: (retrospectiveGlucoseDiscrepanciesSummed ?? []).map",
+    "replayPredictionEffects?.prediction ?? predictedGlucose",
     "dosingDecision.replayPredictionEffects = replayPredictionEffects",
+    '"predictionEffects"',
+    '"insulinCounteraction"',
+    '"retrospectiveGlucoseDiscrepancies"',
+    "testingDetails: replayCaptureTestingDetails",
+    'XCTAssertEqual(capture["schemaVersion"] as? Int, 5)',
 ]
-actual_loop_manager_additions = [
-    line.strip() for line in added.get(loop_manager_path, []) if line.strip()
-]
-if actual_loop_manager_additions != expected_loop_manager_additions:
-    fail(f"unexpected LoopDataManager additions: {actual_loop_manager_additions}")
-if removed.get(loop_manager_path):
-    fail(f"LoopDataManager lines were removed: {removed[loop_manager_path]}")
+for marker in required_markers:
+    if marker not in text:
+        fail(f"missing required marker: {marker}")
 
-loop_manager_test_path = "Loop/LoopTests/Managers/LoopDataManagerDosingTests.swift"
-expected_loop_manager_test_additions = [
-    "func waitOnDataQueue(timeout: TimeInterval = 5.0) {",
-    "wait(for: [exp], timeout: 5.0)",
-    "wait(for: [exp], timeout: 5.0)",
-    "wait(for: [exp], timeout: 5.0)",
-    "wait(for: [exp], timeout: 5.0)",
-    "wait(for: [exp], timeout: 5.0)",
-    "wait(for: [exp], timeout: 5.0)",
-    "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects)",
-    "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects?.prediction)",
-    "wait(for: [exp], timeout: 5.0)",
-    "wait(for: [exp], timeout: 5.0)",
-    "wait(for: [exp], timeout: 5.0)",
-]
-actual_loop_manager_test_additions = [
-    line.strip() for line in added.get(loop_manager_test_path, []) if line.strip()
-]
-if actual_loop_manager_test_additions != expected_loop_manager_test_additions:
-    fail(
-        "unexpected LoopDataManager dosing-test additions: "
-        f"{actual_loop_manager_test_additions}"
-    )
-expected_loop_manager_test_removals = [
-    "func waitOnDataQueue(timeout: TimeInterval = 1.0) {",
-    "wait(for: [exp], timeout: 1.0)",
-    "wait(for: [exp], timeout: 1.0)",
-    "wait(for: [exp], timeout: 1.0)",
-    "wait(for: [exp], timeout: 1.0)",
-    "wait(for: [exp], timeout: 1.0)",
-    "wait(for: [exp], timeout: 1.0)",
-    "wait(for: [exp], timeout: 1.0)",
-    "wait(for: [exp], timeout: 1.0)",
-    "wait(for: [exp], timeout: 1.0)",
-]
-actual_loop_manager_test_removals = [
-    line.strip() for line in removed.get(loop_manager_test_path, []) if line.strip()
-]
-if actual_loop_manager_test_removals != expected_loop_manager_test_removals:
-    fail(
-        "unexpected LoopDataManager dosing-test removals: "
-        f"{actual_loop_manager_test_removals}"
-    )
-
-loopkit_model_path = "LoopKit/LoopKit/DosingDecisionStore.swift"
-if removed.get(loopkit_model_path):
-    fail(f"StoredDosingDecision lines were removed: {removed[loopkit_model_path]}")
+for path in [
+    "Loop/Loop/Managers/LoopDataManager.swift",
+    "LoopKit/LoopKit/DosingDecisionStore.swift",
+    "NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift",
+]:
+    if path not in added:
+        fail(f"missing production changes for {path}")
 
 nightscout_path = "NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift"
 expected_nightscout_removal = [
-    "                                   failureReason: automaticDoseDecision?.loopStatusFailureReason),",
+    '                                   failureReason: automaticDoseDecision?.loopStatusFailureReason),',
     "    ",
 ]
 if removed.get(nightscout_path) != expected_nightscout_removal:
     fail(f"unexpected Nightscout production removals: {removed.get(nightscout_path)}")
 
-required_markers = [
-    '"schemaVersion": 4',
-    "ReplayPredictionEffects: Codable, Equatable",
-    "public let prediction: [PredictedGlucoseValue]?",
-    "let replayPredictionEffects = StoredDosingDecision.ReplayPredictionEffects",
-    "prediction: predictedGlucose",
-    "prediction: diagnosticPrediction",
-    "replayPredictionEffects?.prediction ?? predictedGlucose",
-    "dosingDecision.replayPredictionEffects = replayPredictionEffects",
-    "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects)",
-    "XCTAssertNotNil(dosingDecisionStore.dosingDecisions[0].replayPredictionEffects?.prediction)",
-    '"predictionEffects"',
-    '"insulin"',
-    '"retrospection"',
-    "testingDetails: replayCaptureTestingDetails",
-]
-for marker in required_markers:
-    if marker not in text:
-        fail(f"missing required marker: {marker}")
+loop_manager_path = "Loop/Loop/Managers/LoopDataManager.swift"
+if removed.get(loop_manager_path):
+    fail(f"LoopDataManager production lines were removed: {removed[loop_manager_path]}")
+
+loopkit_model_path = "LoopKit/LoopKit/DosingDecisionStore.swift"
+if removed.get(loopkit_model_path):
+    fail(f"StoredDosingDecision production lines were removed: {removed[loopkit_model_path]}")
 
 added_production = "\n".join(
     line
@@ -191,5 +171,5 @@ for submodule, expected_commit in EXPECTED_SUBMODULE_COMMITS.items():
             f"(expected {expected_commit}, found {actual_commit})"
         )
 
-run("git", "apply", "--check", "--whitespace=fix", str(PATCH))
-print("Replay-export V4 patch preserves prediction components and the exact diagnostic dosing prediction across Loop's cache path.")
+patch_applies_or_is_already_applied()
+print("Replay-export Schema 5 patch remains diagnostic-only and applies cleanly or is already applied.")

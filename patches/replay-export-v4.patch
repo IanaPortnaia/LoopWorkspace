@@ -1,5 +1,5 @@
 diff --git a/Loop/Loop/Managers/LoopDataManager.swift b/Loop/Loop/Managers/LoopDataManager.swift
-index c9aef285..bd3a2cf1 100644
+index c9aef285..d9c5d807 100644
 --- a/Loop/Loop/Managers/LoopDataManager.swift
 +++ b/Loop/Loop/Managers/LoopDataManager.swift
 @@ -395,11 +395,14 @@ final class LoopDataManager {
@@ -25,7 +25,7 @@ index c9aef285..bd3a2cf1 100644
          dosingDecision.automaticDoseRecommendation = recommendedAutomaticDose?.recommendation
  
          // If the glucose prediction hasn't changed, then nothing has changed, so just use pre-existing recommendations
-@@ -1785,7 +1789,18 @@ extension LoopDataManager {
+@@ -1785,7 +1789,24 @@ extension LoopDataManager {
              let predictedGlucoseIncludingPendingInsulin = try predictGlucose(using: settings.enabledEffects, includingPendingInsulin: true)
              self.predictedGlucoseIncludingPendingInsulin = predictedGlucoseIncludingPendingInsulin
  
@@ -35,7 +35,13 @@ index c9aef285..bd3a2cf1 100644
 +                insulin: insulinEffect ?? [],
 +                carbs: carbEffect ?? [],
 +                momentum: glucoseMomentumEffect ?? [],
-+                retrospection: retrospectiveGlucoseEffect
++                retrospection: retrospectiveGlucoseEffect,
++                insulinCounteractionEffects: insulinCounteractionEffects.map {
++                    StoredDosingDecision.ReplayCounteractionEffect(effect: $0)
++                },
++                retrospectiveGlucoseDiscrepancies: (retrospectiveGlucoseDiscrepanciesSummed ?? []).map {
++                    StoredDosingDecision.ReplayGlucoseChange(change: $0)
++                }
 +            )
 +            self.replayPredictionEffects = replayPredictionEffects
 +
@@ -147,9 +153,8 @@ index a1f26a0e..6e41b844 100644
          XCTAssertEqual(recommendedBolus!.amount, 1.52, accuracy: 0.01)
      }
  
-
 diff --git a/LoopKit/LoopKit/DosingDecisionStore.swift b/LoopKit/LoopKit/DosingDecisionStore.swift
-index 7d91b59..7709a7c 100644
+index 7d91b59..b7fd236 100644
 --- a/LoopKit/LoopKit/DosingDecisionStore.swift
 +++ b/LoopKit/LoopKit/DosingDecisionStore.swift
 @@ -255,6 +255,7 @@ public struct StoredDosingDecision {
@@ -176,7 +181,7 @@ index 7d91b59..7709a7c 100644
          self.automaticDoseRecommendation = automaticDoseRecommendation
          self.manualBolusRecommendation = manualBolusRecommendation
          self.manualBolusRequested = manualBolusRequested
-@@ -320,6 +323,31 @@ public struct StoredDosingDecision {
+@@ -320,6 +323,71 @@ public struct StoredDosingDecision {
          }
      }
  
@@ -187,6 +192,8 @@ index 7d91b59..7709a7c 100644
 +        public let carbs: [GlucoseEffect]
 +        public let momentum: [GlucoseEffect]
 +        public let retrospection: [GlucoseEffect]
++        public let insulinCounteractionEffects: [ReplayCounteractionEffect]
++        public let retrospectiveGlucoseDiscrepancies: [ReplayGlucoseChange]
 +
 +        public init(
 +            enabledEffectsRawValue: Int,
@@ -194,7 +201,9 @@ index 7d91b59..7709a7c 100644
 +            insulin: [GlucoseEffect],
 +            carbs: [GlucoseEffect],
 +            momentum: [GlucoseEffect],
-+            retrospection: [GlucoseEffect]
++            retrospection: [GlucoseEffect],
++            insulinCounteractionEffects: [ReplayCounteractionEffect] = [],
++            retrospectiveGlucoseDiscrepancies: [ReplayGlucoseChange] = []
 +        ) {
 +            self.enabledEffectsRawValue = enabledEffectsRawValue
 +            self.prediction = prediction
@@ -202,13 +211,49 @@ index 7d91b59..7709a7c 100644
 +            self.carbs = carbs
 +            self.momentum = momentum
 +            self.retrospection = retrospection
++            self.insulinCounteractionEffects = insulinCounteractionEffects
++            self.retrospectiveGlucoseDiscrepancies = retrospectiveGlucoseDiscrepancies
++        }
++    }
++
++    public struct ReplayCounteractionEffect: Codable, Equatable {
++        public let startDate: Date
++        public let endDate: Date
++        public let mgdlPerMinute: Double
++        public let integratedMgdl: Double
++
++        public init(effect: GlucoseEffectVelocity) {
++            self.startDate = effect.startDate
++            self.endDate = effect.endDate
++            self.mgdlPerMinute = effect.quantity.doubleValue(for: .milligramsPerDeciliterPerMinute)
++            self.integratedMgdl = effect.effect.quantity.doubleValue(for: .milligramsPerDeciliter)
++        }
++    }
++
++    public struct ReplayGlucoseChange: Codable, Equatable {
++        public let startDate: Date
++        public let endDate: Date
++        public let mgdl: Double
++
++        public init(startDate: Date, endDate: Date, mgdl: Double) {
++            self.startDate = startDate
++            self.endDate = endDate
++            self.mgdl = mgdl
++        }
++
++        public init(change: GlucoseChange) {
++            self.init(
++                startDate: change.startDate,
++                endDate: change.endDate,
++                mgdl: change.quantity.doubleValue(for: .milligramsPerDeciliter)
++            )
 +        }
 +    }
 +
      public struct ControllerStatus: Codable, Equatable {
          public enum BatteryState: String, Codable {
              case unknown
-@@ -401,6 +429,7 @@ extension StoredDosingDecision: Codable {
+@@ -401,6 +469,7 @@ extension StoredDosingDecision: Codable {
                    insulinOnBoard: try container.decodeIfPresent(InsulinValue.self, forKey: .insulinOnBoard),
                    glucoseTargetRangeSchedule: try container.decodeIfPresent(GlucoseRangeSchedule.self, forKey: .glucoseTargetRangeSchedule),
                    predictedGlucose: try container.decodeIfPresent([PredictedGlucoseValue].self, forKey: .predictedGlucose),
@@ -216,7 +261,7 @@ index 7d91b59..7709a7c 100644
                    automaticDoseRecommendation: try container.decodeIfPresent(AutomaticDoseRecommendation.self, forKey: .automaticDoseRecommendation),
                    manualBolusRecommendation: try container.decodeIfPresent(ManualBolusRecommendationWithDate.self, forKey: .manualBolusRecommendation),
                    manualBolusRequested: try container.decodeIfPresent(Double.self, forKey: .manualBolusRequested),
-@@ -429,6 +458,7 @@ extension StoredDosingDecision: Codable {
+@@ -429,6 +498,7 @@ extension StoredDosingDecision: Codable {
          try container.encodeIfPresent(insulinOnBoard, forKey: .insulinOnBoard)
          try container.encodeIfPresent(glucoseTargetRangeSchedule, forKey: .glucoseTargetRangeSchedule)
          try container.encodeIfPresent(predictedGlucose, forKey: .predictedGlucose)
@@ -224,7 +269,7 @@ index 7d91b59..7709a7c 100644
          try container.encodeIfPresent(automaticDoseRecommendation, forKey: .automaticDoseRecommendation)
          try container.encodeIfPresent(manualBolusRecommendation, forKey: .manualBolusRecommendation)
          try container.encodeIfPresent(manualBolusRequested, forKey: .manualBolusRequested)
-@@ -456,6 +486,7 @@ extension StoredDosingDecision: Codable {
+@@ -456,6 +526,7 @@ extension StoredDosingDecision: Codable {
          case insulinOnBoard
          case glucoseTargetRangeSchedule
          case predictedGlucose
@@ -233,10 +278,10 @@ index 7d91b59..7709a7c 100644
          case manualBolusRecommendation
          case manualBolusRequested
 diff --git a/LoopKit/LoopKitTests/DosingDecisionStoreTests.swift b/LoopKit/LoopKitTests/DosingDecisionStoreTests.swift
-index dc9846e..a3359d8 100644
+index dc9846e..16b4185 100644
 --- a/LoopKit/LoopKitTests/DosingDecisionStoreTests.swift
 +++ b/LoopKit/LoopKitTests/DosingDecisionStoreTests.swift
-@@ -970,6 +970,34 @@ class StoredDosingDecisionCodableTests: XCTestCase {
+@@ -970,6 +970,50 @@ class StoredDosingDecisionCodableTests: XCTestCase {
          )
      }
  
@@ -250,6 +295,16 @@ index dc9846e..a3359d8 100644
 +            startDate: startDate,
 +            quantity: HKQuantity(unit: .milligramsPerDeciliter, doubleValue: 110)
 +        )
++        let counteraction = GlucoseEffectVelocity(
++            startDate: startDate.addingTimeInterval(-300),
++            endDate: startDate,
++            quantity: HKQuantity(unit: .milligramsPerDeciliterPerMinute, doubleValue: 0.2)
++        )
++        let discrepancy = GlucoseChange(
++            startDate: startDate.addingTimeInterval(-1800),
++            endDate: startDate,
++            quantity: HKQuantity(unit: .milligramsPerDeciliter, doubleValue: 4.5)
++        )
 +        let original = StoredDosingDecision(
 +            reason: "loop",
 +            replayPredictionEffects: StoredDosingDecision.ReplayPredictionEffects(
@@ -258,7 +313,13 @@ index dc9846e..a3359d8 100644
 +                insulin: [effect],
 +                carbs: [effect],
 +                momentum: [effect],
-+                retrospection: [effect]
++                retrospection: [effect],
++                insulinCounteractionEffects: [
++                    StoredDosingDecision.ReplayCounteractionEffect(effect: counteraction)
++                ],
++                retrospectiveGlucoseDiscrepancies: [
++                    StoredDosingDecision.ReplayGlucoseChange(change: discrepancy)
++                ]
 +            )
 +        )
 +
@@ -271,7 +332,7 @@ index dc9846e..a3359d8 100644
      private func assertStoredDosingDecisionCodable(_ original: StoredDosingDecision, encodesJSON string: String) throws {
          let data = try encoder.encode(original)
          XCTAssertEqual(String(data: data, encoding: .utf8), string)
-@@ -1011,6 +1039,7 @@ extension StoredDosingDecision: Equatable {
+@@ -1011,6 +1055,7 @@ extension StoredDosingDecision: Equatable {
              lhs.insulinOnBoard == rhs.insulinOnBoard &&
              lhs.glucoseTargetRangeSchedule == rhs.glucoseTargetRangeSchedule &&
              lhs.predictedGlucose == rhs.predictedGlucose &&
@@ -279,12 +340,11 @@ index dc9846e..a3359d8 100644
              lhs.automaticDoseRecommendation == rhs.automaticDoseRecommendation &&
              lhs.manualBolusRecommendation == rhs.manualBolusRecommendation &&
              lhs.manualBolusRequested == rhs.manualBolusRequested &&
-
 diff --git a/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift b/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift
-index aba4104..5f74900 100644
+index aba4104..0e78d9c 100644
 --- a/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift
 +++ b/NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift
-@@ -53,6 +53,101 @@ extension StoredDosingDecision {
+@@ -53,6 +53,126 @@ extension StoredDosingDecision {
              bolusVolume: automaticDoseRecommendation.bolusUnits ?? 0)
      }
  
@@ -323,6 +383,29 @@ index aba4104..5f74900 100644
 +        }
 +    }
 +
++    private func replayCaptureCounteractionTimeline(_ effects: [StoredDosingDecision.ReplayCounteractionEffect]) -> [[String: Any]] {
++        let formatter = ISO8601DateFormatter()
++        return effects.map {
++            [
++                "startTimestamp": formatter.string(from: $0.startDate),
++                "endTimestamp": formatter.string(from: $0.endDate),
++                "mgdlPerMinute": $0.mgdlPerMinute,
++                "mgdl": $0.integratedMgdl
++            ]
++        }
++    }
++
++    private func replayCaptureGlucoseChangeTimeline(_ changes: [StoredDosingDecision.ReplayGlucoseChange]) -> [[String: Any]] {
++        let formatter = ISO8601DateFormatter()
++        return changes.map {
++            [
++                "startTimestamp": formatter.string(from: $0.startDate),
++                "endTimestamp": formatter.string(from: $0.endDate),
++                "mgdl": $0.mgdl
++            ]
++        }
++    }
++
 +    private var replayCapturePredictionEffects: [String: Any]? {
 +        guard let effects = replayPredictionEffects else {
 +            return nil
@@ -333,7 +416,9 @@ index aba4104..5f74900 100644
 +            "insulin": replayCaptureEffectTimeline(effects.insulin),
 +            "carbs": replayCaptureEffectTimeline(effects.carbs),
 +            "momentum": replayCaptureEffectTimeline(effects.momentum),
-+            "retrospection": replayCaptureEffectTimeline(effects.retrospection)
++            "retrospection": replayCaptureEffectTimeline(effects.retrospection),
++            "insulinCounteraction": replayCaptureCounteractionTimeline(effects.insulinCounteractionEffects),
++            "retrospectiveGlucoseDiscrepancies": replayCaptureGlucoseChangeTimeline(effects.retrospectiveGlucoseDiscrepancies)
 +        ]
 +    }
 +
@@ -344,7 +429,7 @@ index aba4104..5f74900 100644
 +
 +        let formatter = ISO8601DateFormatter()
 +        var capture: [String: Any] = [
-+            "schemaVersion": 4,
++            "schemaVersion": 5,
 +            "captureRole": "completedLoopDecision",
 +            "statusDecisionSyncIdentifier": syncIdentifier.uuidString,
 +            "statusDecisionReason": reason,
@@ -386,7 +471,7 @@ index aba4104..5f74900 100644
      var loopStatusRecommendedBolus: Double? {
          guard let manualBolusRecommendation = manualBolusRecommendation else {
              return nil
-@@ -156,10 +251,11 @@ extension StoredDosingDecision {
+@@ -156,10 +276,11 @@ extension StoredDosingDecision {
                                     automaticDoseRecommendation: loopStatusAutomaticDoseRecommendation,
                                     recommendedBolus: loopStatusRecommendedBolus,
                                     enacted: automaticDoseDecision?.loopStatusEnacted,
@@ -401,7 +486,7 @@ index aba4104..5f74900 100644
  
  extension StoredDosingDecision.Issue {
 diff --git a/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift b/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift
-index 95a6998..2cc7092 100644
+index 95a6998..1ce13f3 100644
 --- a/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift
 +++ b/NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift
 @@ -6,6 +6,8 @@
@@ -413,7 +498,7 @@ index 95a6998..2cc7092 100644
  import XCTest
  @testable import NightscoutServiceKit
  
-@@ -55,5 +57,108 @@ final class BolusRemoteNotificationTestCase: XCTestCase {
+@@ -55,5 +57,126 @@ final class BolusRemoteNotificationTestCase: XCTestCase {
          formatter.formatOptions =  [.withInternetDateTime, .withFractionalSeconds]
          return formatter
      }
@@ -433,6 +518,16 @@ index 95a6998..2cc7092 100644
 +        let effect = GlucoseEffect(
 +            startDate: loopDate,
 +            quantity: HKQuantity(unit: glucoseUnit, doubleValue: -2.5)
++        )
++        let counteraction = GlucoseEffectVelocity(
++            startDate: loopDate.addingTimeInterval(-300),
++            endDate: loopDate,
++            quantity: HKQuantity(unit: .milligramsPerDeciliterPerMinute, doubleValue: 0.4)
++        )
++        let discrepancy = StoredDosingDecision.ReplayGlucoseChange(
++            startDate: loopDate.addingTimeInterval(-1800),
++            endDate: loopDate,
++            mgdl: 6.5
 +        )
 +        let diagnosticPrediction = [
 +            PredictedGlucoseValue(
@@ -477,7 +572,13 @@ index 95a6998..2cc7092 100644
 +                insulin: [effect],
 +                carbs: [effect],
 +                momentum: [effect],
-+                retrospection: [effect]
++                retrospection: [effect],
++                insulinCounteractionEffects: [
++                    StoredDosingDecision.ReplayCounteractionEffect(effect: counteraction)
++                ],
++                retrospectiveGlucoseDiscrepancies: [
++                    discrepancy
++                ]
 +            ),
 +            automaticDoseRecommendation: AutomaticDoseRecommendation(
 +                basalAdjustment: TempBasalRecommendation(unitsPerHour: 0.7, duration: 30 * 60),
@@ -498,7 +599,7 @@ index 95a6998..2cc7092 100644
 +        XCTAssertTrue(JSONSerialization.isValidJSONObject(dictionary))
 +        XCTAssertLessThan(try JSONSerialization.data(withJSONObject: dictionary).count, 20_000)
 +        let capture = try XCTUnwrap(dictionary["replayCapture"] as? [String: Any])
-+        XCTAssertEqual(capture["schemaVersion"] as? Int, 4)
++        XCTAssertEqual(capture["schemaVersion"] as? Int, 5)
 +        XCTAssertEqual(capture["captureRole"] as? String, "completedLoopDecision")
 +        XCTAssertEqual(capture["loopDecisionSyncIdentifier"] as? String, loopIdentifier.uuidString)
 +        XCTAssertEqual(capture["statusDecisionSyncIdentifier"] as? String, statusIdentifier.uuidString)
@@ -512,6 +613,8 @@ index 95a6998..2cc7092 100644
 +        XCTAssertEqual((predictionEffects["carbs"] as? [[String: Any]])?.count, 1)
 +        XCTAssertEqual((predictionEffects["momentum"] as? [[String: Any]])?.count, 1)
 +        XCTAssertEqual((predictionEffects["retrospection"] as? [[String: Any]])?.count, 1)
++        XCTAssertEqual((predictionEffects["insulinCounteraction"] as? [[String: Any]])?.first?["mgdlPerMinute"] as? Double, 0.4)
++        XCTAssertEqual((predictionEffects["retrospectiveGlucoseDiscrepancies"] as? [[String: Any]])?.first?["mgdl"] as? Double, 6.5)
 +        let recommendation = try XCTUnwrap(capture["automaticDoseRecommendation"] as? [String: Any])
 +        XCTAssertEqual(recommendation["bolusVolume"] as? Double, 0.25)
 +        XCTAssertEqual((capture["historicalGlucose"] as? [[String: Any]])?.count, 2)
