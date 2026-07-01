@@ -98,6 +98,7 @@ jobs:
       - name: Sync upstream changes
         if: | # do not run the upstream sync action on the upstream repository
           steps.workflow-permission.outputs.has_permission == 'true' &&
+          github.event_name != 'workflow_dispatch' &&
           vars.SCHEDULED_SYNC != 'false' && github.repository_owner != 'LoopKit'
         id: sync
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.2
@@ -112,17 +113,22 @@ jobs:
       - name: New commits found
         if: |
           steps.workflow-permission.outputs.has_permission == 'true' &&
+          github.event_name != 'workflow_dispatch' &&
           vars.SCHEDULED_SYNC != 'false' && steps.sync.outputs.has_new_commits == 'true'
         run: echo "New commits were found to sync."
 
       - name: No new commits
         if: |
           steps.workflow-permission.outputs.has_permission == 'true' &&
+          github.event_name != 'workflow_dispatch' &&
           vars.SCHEDULED_SYNC != 'false' && steps.sync.outputs.has_new_commits == 'false'
         run: echo "There were no new commits."
 
       - name: Show value of 'has_new_commits'
-        if: steps.workflow-permission.outputs.has_permission == 'true' && vars.SCHEDULED_SYNC != 'false'
+        if: |
+          steps.workflow-permission.outputs.has_permission == 'true' &&
+          github.event_name != 'workflow_dispatch' &&
+          vars.SCHEDULED_SYNC != 'false'
         run: |
           echo ${{ steps.sync.outputs.has_new_commits }}
           echo "NEW_COMMITS=${{ steps.sync.outputs.has_new_commits }}" >> $GITHUB_OUTPUT
