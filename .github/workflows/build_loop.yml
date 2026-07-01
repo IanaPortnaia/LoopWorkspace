@@ -196,7 +196,9 @@ jobs:
 
           # LoopWorkspace patches
           # -applies any patches located in the LoopWorkspace/patches/ directory
-          if $(ls ./patches/* &> /dev/null); then
+          if [ "${{ github.ref_name }}" = "replay-export-schema6-local" ]; then
+          echo "Skipping patch application because replay export changes are committed in forked submodules on this branch."
+          elif $(ls ./patches/* &> /dev/null); then
           git apply ./patches/* --allow-empty -v --whitespace=fix
           fi
 
