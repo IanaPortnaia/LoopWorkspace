@@ -156,6 +156,16 @@ class ReplayGuardTests(unittest.TestCase):
         replay.patch_bytes(replay.ROOT, config)
         replay.verify_build_hook(replay.ROOT)
 
+    def test_real_dose_selectors_name_classes_not_the_source_file(self):
+        replay.verify_dose_test_selectors(replay.ROOT)
+
+    def test_missing_dose_test_class_fails_before_xcode(self):
+        source = self.root / "LoopKit/LoopKitTests/DoseMathTests.swift"
+        source.parent.mkdir(parents=True)
+        source.write_text("class RecommendTempBasalTests: XCTestCase {}\n")
+        with self.assertRaisesRegex(replay.ValidationError, "RecommendBolusTests"):
+            replay.verify_dose_test_selectors(self.root)
+
 
 if __name__ == "__main__":
     unittest.main()

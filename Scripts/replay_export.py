@@ -14,6 +14,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_HOOK = 'sh("python3", "#{GITHUB_WORKSPACE}/Scripts/replay_export.py", "validate-build")'
 WORKFLOWS = ("build_loop.yml", "build_loop_auto.yml")
+DOSE_MATH_CLASSES = ("RecommendTempBasalTests", "RecommendBolusTests")
 LOOP_TESTS = (
     "testForecastFromLiveCaptureInputData", "testFlatAndStable", "testHighAndStable",
     "testHighAndFalling", "testHighAndRisingWithCOB", "testLowAndFallingWithCOB",
@@ -177,6 +178,13 @@ def assert_test_summary(summary, minimum):
         raise ValidationError(f"Missing, skipped, or failed required tests: {summary}")
 
 
+def verify_dose_test_selectors(root):
+    source = (root / "LoopKit/LoopKitTests/DoseMathTests.swift").read_text(encoding="utf-8")
+    for name in DOSE_MATH_CLASSES:
+        if not re.search(r"(?m)^class " + re.escape(name) + r"\s*:\s*XCTestCase\b", source):
+            raise ValidationError(f"Required dose test class is missing: {name}")
+
+
 def run_xcode(root, args):
     print("Running: " + " ".join(args), flush=True)
     result = subprocess.run(args, cwd=root)
@@ -188,6 +196,7 @@ def validate(root, build=False):
     if sys.platform != "darwin":
         raise ValidationError("Unsigned Xcode validation requires the GitHub macOS runner")
     config = prepare(root, apply=not build, require_applied=build)
+    verify_dose_test_selectors(root)
     expected_xcode = xcode_path(root)
     if command(root, "xcode-select", "-p").stdout.strip() != expected_xcode:
         raise ValidationError("Validation must use the same Xcode as the release build")
@@ -204,7 +213,7 @@ def validate(root, build=False):
               "CODE_SIGNING_ALLOWED=NO"]
     suites = [
         ("NightscoutReplayValidation", "export", ["NightscoutServiceKitTests/ReplayCaptureTestCase"], 2),
-        ("ReplayCoreRegression", "dose-math", ["LoopKitTests/DoseMathTests"], 1),
+        ("ReplayCoreRegression", "dose-math", ["LoopKitTests/" + name for name in DOSE_MATH_CLASSES], 57),
         ("ReplayCoreRegression", "persistence", ["LoopKitTests/StoredDosingDecisionCodableTests/testReplayPredictionEffectsCodable"], 1),
         ("ReplayCoreRegression", "loop-dosing", ["LoopTests/LoopDataManagerDosingTests/" + name for name in LOOP_TESTS], len(LOOP_TESTS)),
     ]
