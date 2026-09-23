@@ -26,6 +26,7 @@ ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] = "120"
 platform :ios do
   desc "Build Loop"
   lane :build_loop do
+    sh("python3", "#{GITHUB_WORKSPACE}/Scripts/replay_export.py", "validate-build")
     setup_ci if ENV['CI']
     
     update_project_team(
