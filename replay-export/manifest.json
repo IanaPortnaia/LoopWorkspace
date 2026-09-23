@@ -1,0 +1,32 @@
+{
+  "schema_version": 7,
+  "patch": "patches/replay-export-schema7.patch",
+  "patch_sha256": "9158531c2b2aca448cc9c772c22ea9c19153ea327cd7873e2fd44496b7a8a5ce",
+  "tested_upstream_release": "v3.14.8",
+  "tested_upstream_workspace": "f841285",
+  "prior_working_workspace": "2737c4d1d944ccf0bea14ec723918680e0b94a8a",
+  "upstream_modules": {
+    "Loop": "https://github.com/LoopKit/Loop.git",
+    "LoopKit": "https://github.com/LoopKit/LoopKit.git",
+    "NightscoutService": "https://github.com/LoopKit/NightscoutService.git"
+  },
+  "overlay_paths": [
+    "Loop/Loop/Managers/LoopDataManager.swift",
+    "Loop/LoopTests/Managers/LoopDataManagerDosingTests.swift",
+    "LoopKit/LoopKit/DosingDecisionStore.swift",
+    "LoopKit/LoopKitTests/DosingDecisionStoreTests.swift",
+    "NightscoutService/NightscoutServiceKit/Extensions/StoredDosingDecision.swift",
+    "NightscoutService/NightscoutServiceKit/NightscoutService.swift",
+    "NightscoutService/NightscoutServiceKitTests/BolusRemoteNotificationTestCase.swift"
+  ],
+  "protected_upstream_blobs": {
+    "Loop/Loop/Managers/LoopDataManager.swift": "c9aef285e8ab3ebe1e773b3fe3cb8312250f3d5f",
+    "LoopKit/LoopKit/DosingDecisionStore.swift": "7d91b5991ed3a1bccccd9ee654193c5e2d21be96",
+    "LoopKit/LoopKit/LoopMath.swift": "cc629e9aacb49a45332eba73a21553679e69c9df",
+    "LoopKit/LoopKit/LoopAlgorithm/DoseMath.swift": "f4b8d44ac6af37d5e4d14fa7a22b9c4d46be3330",
+    "LoopKit/LoopKit/CarbKit/CarbMath.swift": "1c3c42a4aa3264694ca83ef7d8489fa09dbe3bc1",
+    "LoopKit/LoopKit/CarbKit/CarbStatus.swift": "c3acf2df152b6d8a36b9cbb4987f9028673638d3",
+    "LoopKit/LoopKit/InsulinKit/ExponentialInsulinModel.swift": "1780c35dd4de63b2b3b11dac8d9901a01673d68e",
+    "LoopKit/LoopKit/Insulin/ExponentialInsulinModelPreset.swift": "7ba9842cfc9ce0554e9bd5ef8fb234b7fa2c2652"
+  }
+}

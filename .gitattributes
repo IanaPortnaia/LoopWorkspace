@@ -1,1 +1,2 @@
-patches/replay-export-v1.patch whitespace=-blank-at-eol
+patches/*.patch text eol=lf whitespace=-blank-at-eol
+replay-export/archive/*.patch text eol=lf whitespace=-blank-at-eol
