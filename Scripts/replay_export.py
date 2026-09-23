@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed Schema 7 overlay and unsigned build validation for upstream syncs."""
+"""Fail-closed Schema 7 overlay and simulator validation for upstream syncs."""
 
 import argparse
 import hashlib
@@ -189,12 +189,21 @@ def run_xcode(root, args):
     print("Running: " + " ".join(args), flush=True)
     result = subprocess.run(args, cwd=root)
     if result.returncode:
-        raise ValidationError(f"Unsigned Xcode validation failed ({result.returncode})")
+        raise ValidationError(f"Simulator Xcode validation failed ({result.returncode})")
+
+
+def simulator_build_options(device_id, result_dir):
+    # The test host needs its Siri/HealthKit entitlements. Disabling signing
+    # entirely strips them; ad-hoc simulator signing needs no Apple identity.
+    return ["-workspace", "LoopWorkspace.xcworkspace", "-destination",
+            f"platform=iOS Simulator,id={device_id}", "-derivedDataPath", str(result_dir / "DerivedData"),
+            "CODE_SIGNING_ALLOWED=YES", "CODE_SIGN_IDENTITY=-", "CODE_SIGN_STYLE=Manual",
+            "DEVELOPMENT_TEAM=", "PROVISIONING_PROFILE_SPECIFIER=", "PROVISIONING_PROFILE="]
 
 
 def validate(root, build=False):
     if sys.platform != "darwin":
-        raise ValidationError("Unsigned Xcode validation requires the GitHub macOS runner")
+        raise ValidationError("Simulator Xcode validation requires the GitHub macOS runner")
     config = prepare(root, apply=not build, require_applied=build)
     verify_dose_test_selectors(root)
     expected_xcode = xcode_path(root)
@@ -208,9 +217,7 @@ def validate(root, build=False):
     out = root / "artifacts"
     out.mkdir(exist_ok=True)
     result_dir = Path(tempfile.mkdtemp(prefix="replay-validation-", dir=out))
-    common = ["-workspace", "LoopWorkspace.xcworkspace", "-destination",
-              f"platform=iOS Simulator,id={iphones[0]}", "-derivedDataPath", str(result_dir / "DerivedData"),
-              "CODE_SIGNING_ALLOWED=NO"]
+    common = simulator_build_options(iphones[0], result_dir)
     suites = [
         ("NightscoutReplayValidation", "export", ["NightscoutServiceKitTests/ReplayCaptureTestCase"], 2),
         ("ReplayCoreRegression", "dose-math", ["LoopKitTests/" + name for name in DOSE_MATH_CLASSES], 57),
@@ -231,9 +238,10 @@ def validate(root, build=False):
     run_xcode(root, ["xcodebuild", "build", "-scheme", "Loop", *common])
     receipt = {"workspace_commit": command(root, "git", "rev-parse", "HEAD").stdout.strip(),
                "patch_sha256": config["patch_sha256"], "xcode": expected_xcode,
-               "schema_version": 7, "suites": summaries, "unsigned_build_passed": True}
+               "schema_version": 7, "suites": summaries, "simulator_build_passed": True,
+               "signing_mode": "ad-hoc-simulator-only", "distribution_signing": False}
     (result_dir / "validation.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
-    print(f"Unsigned replay validation passed: {result_dir / 'validation.json'}", flush=True)
+    print(f"Simulator replay validation passed: {result_dir / 'validation.json'}", flush=True)
 
 
 def main():

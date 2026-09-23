@@ -166,6 +166,16 @@ class ReplayGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(replay.ValidationError, "RecommendBolusTests"):
             replay.verify_dose_test_selectors(self.root)
 
+    def test_simulator_signing_preserves_entitlements_without_distribution_identity(self):
+        args = replay.simulator_build_options("simulator-id", self.root)
+        self.assertEqual(args[args.index("-destination") + 1], "platform=iOS Simulator,id=simulator-id")
+        for required in ("CODE_SIGNING_ALLOWED=YES", "CODE_SIGN_IDENTITY=-", "CODE_SIGN_STYLE=Manual",
+                         "DEVELOPMENT_TEAM=", "PROVISIONING_PROFILE_SPECIFIER=", "PROVISIONING_PROFILE="):
+            self.assertIn(required, args)
+        self.assertNotIn("CODE_SIGNING_ALLOWED=NO", args)
+        self.assertFalse(any(arg.startswith("CODE_SIGN_ENTITLEMENTS=") for arg in args))
+        self.assertNotIn("-allowProvisioningUpdates", args)
+
 
 if __name__ == "__main__":
     unittest.main()

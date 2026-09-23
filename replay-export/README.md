@@ -35,7 +35,8 @@ disable the guard or build without the export to bypass such a failure.
 - `replay-export/manifest.json` records the reviewed patch digest, allowed paths,
   protected upstream core-file blob IDs and the previous working workspace.
 - `Scripts/replay_export.py` validates the overlay, upstream checkouts, build
-  hooks and selected Xcode, and runs unsigned regression tests.
+  hooks and selected Xcode, and runs simulator regression tests without
+  distribution credentials.
 - One line at the start of `fastlane/Fastfile`'s `build_loop` lane runs mandatory
   validation before the lane's signing, App Store lookup and archive operations.
 - `.github/workflows/validate_replay_export.yml` runs without distribution
@@ -69,9 +70,12 @@ python3 Scripts/replay_export.py validate
 
 `validate-build` additionally requires that the standard build workflow has
 already applied the overlay. It refuses to silently repair a missing Customize
-Loop step. Successful Xcode validation produces an unsigned-build/test receipt
-under `artifacts/replay-validation-*/validation.json`. This receipt describes
-engineering tests, not clinical validation or successful device installation.
+Loop step. Successful Xcode validation produces a simulator-build/test receipt
+under `artifacts/replay-validation-*/validation.json`. Validation uses ad-hoc
+simulator signing (identity `-`, no team or provisioning profile) to preserve
+Siri/HealthKit entitlements in the test host. It does not use an Apple signing
+certificate or upload a build. This receipt describes engineering tests, not
+clinical validation or successful device installation.
 
 ## Review After an Incompatible Update
 
@@ -79,7 +83,7 @@ Inspect the upstream change and merge the diagnostic additions against the new
 source. Review the resulting diff before replacing the patch and manifest.
 Protected baseline hashes must never be automatically refreshed merely to turn
 the check green. Re-run persistence, export, dose-math, selected Loop dosing
-tests and an unsigned app build. Revalidate sandbox source assumptions if core
+tests and a simulator app build. Revalidate sandbox source assumptions if core
 prediction or dosing mechanisms changed.
 
 The prior known-working workspace is

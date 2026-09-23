@@ -32,10 +32,13 @@ The validator requires:
    files require explicit review, even when the patch still applies.
 4. Full patch applicability or a fully applied patch. Partial application fails.
 5. The pre-signing Fastlane guard and upstream patch hooks in both build workflows.
-6. The same Xcode selected by both build workflows and unsigned validation.
+6. The same Xcode selected by both build workflows and simulator validation.
 7. Passing Nightscout replay serialization, replay Codable persistence, LoopKit
    dose-math and 16 selected LoopDataManager dosing regression tests.
-8. A successful unsigned simulator build of Loop.
+8. A successful simulator build of Loop using only ad-hoc signing, with no Apple
+   certificate, development team or provisioning profile. The app's existing
+   entitlements are preserved; disabling signing entirely prevents the test host
+   from starting when it accesses Siri.
 
 The test gate rejects zero, missing, skipped or failed required tests. It does not
 retry a failed test until it happens to pass. Both upstream release workflows
