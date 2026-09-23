@@ -2,6 +2,10 @@
 
 ## Normal Updates
 
+Merge the initial integration PR using **Create a merge commit**, not squash or
+rebase. This preserves the upstream v3.14.8 ancestry so future fork syncs do not
+try to merge the same upstream history again.
+
 After this integration is merged, use the fork's **main** branch:
 
 1. Use GitHub's **Sync fork / Update branch**, preserving local commits. Never
