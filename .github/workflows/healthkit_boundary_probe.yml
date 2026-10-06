@@ -1,0 +1,45 @@
+name: HealthKit Boundary Probe
+run-name: HealthKit numerical probe (${{ github.ref_name }})
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/healthkit-boundary-probe]
+    paths:
+      - .github/workflows/healthkit_boundary_probe.yml
+      - Scripts/HealthKitBoundaryProbe.swift
+      - Scripts/probe_healthkit_boundary.py
+      - Scripts/tests/test_healthkit_boundary_probe.py
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Isolated simulator quantity comparisons
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+          persist-credentials: false
+      - name: Test probe validation and simulator selection
+        run: python3 -m unittest discover -s Scripts/tests -p test_healthkit_boundary_probe.py -v
+      - name: Select the Xcode configured for the existing build workflows
+        run: sudo xcode-select --switch "$(python3 Scripts/replay_export.py xcode-path)"
+      - name: Run standalone native probe, without building Loop
+        run: python3 Scripts/probe_healthkit_boundary.py
+      - name: Ensure no tracked source was modified
+        if: always()
+        run: git diff --exit-code
+      - name: Upload numerical results and environment
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: healthkit-boundary-probe
+          if-no-files-found: warn
+          path: |
+            artifacts/healthkit-boundary-probe/*.json
+            artifacts/healthkit-boundary-probe/*.log
+            artifacts/healthkit-boundary-probe/*.md
