@@ -36,6 +36,18 @@ def fixture():
 
 
 class HealthKitProbeTests(unittest.TestCase):
+    def test_recorded_ios26_5_native_result_retains_quantity_scalar_difference(self):
+        path = Path(__file__).with_name('fixtures') / 'healthkit_boundary_ios26_5.json'
+        payload = json.loads(path.read_text(encoding='utf-8'))
+        row = probe.validate_result(payload)
+        self.assertEqual(row['native_compare'], 'same')
+        self.assertFalse(row['native_quantity_below_target'])
+        self.assertTrue(row['native_converted_scalars_below_target'])
+        self.assertEqual(row['native_target_mgdl'], row['naive_target_mgdl'])
+        rows = {r['id']: r for r in payload['cases']}
+        self.assertEqual(rows['same_next_up']['native_compare'], 'descending')
+        self.assertEqual(rows['cross_next_up']['native_compare'], 'same')
+
     def test_complete_result_and_unmodified_input(self):
         payload = fixture(); before = deepcopy(payload)
         self.assertEqual(probe.validate_result(payload)['id'], 'cross_exact')

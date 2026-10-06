@@ -10,6 +10,7 @@ on:
       - Scripts/HealthKitBoundaryProbe.swift
       - Scripts/probe_healthkit_boundary.py
       - Scripts/tests/test_healthkit_boundary_probe.py
+      - Scripts/tests/fixtures/healthkit_boundary_ios26_5.json
 
 permissions:
   contents: read

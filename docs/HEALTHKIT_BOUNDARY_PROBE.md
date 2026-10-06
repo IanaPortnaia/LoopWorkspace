@@ -62,3 +62,40 @@ Passing this probe validates the isolated behavior on the recorded simulator
 runtime. It does not establish equivalence on every iOS version, complete Loop
 decision parity or clinical benefit. Any Python correction needs its own scoped
 regression run after these results are inspected.
+
+## Recorded Native Result: October 6, 2026
+
+[GitHub run 37456766056](https://github.com/IanaPortnaia/LoopWorkspace/actions/runs/37456766056)
+succeeded at source commit `467fe3a3c784b5eabe6d188e0eec7d379990502a`.
+The environment was Xcode 26.5 (17F42), iOS 26.5 simulator (23F77), arm64,
+iPhone Air. All 12 fixtures passed the validation contract.
+
+The original downloaded `result.json` SHA256 is
+`a3756c52f7d5f7be84e2a501436a4ab6f1cf8926ccc7779ee8cdd311d918c4e4`.
+A JSON-reformatted, bit-pattern-validated copy of all numerical results is kept
+in `Scripts/tests/fixtures/healthkit_boundary_ios26_5.json`. The recorded fixture
+test checks that this evidence is preserved; it is not a substitute for a new
+native run on a different runtime.
+
+| Check | Native result |
+| --- | --- |
+| 100 mg/dL versus cross-unit target | Quantity comparison: equal |
+| Target converted by HealthKit to mg/dL | 100.00000000000001 |
+| Converted scalar comparison, 100 < target | true |
+| 100.nextDown versus cross-unit target | ascending |
+| 100.nextUp versus cross-unit target | equal |
+| 100.nextUp versus 100 in the same unit | descending |
+
+This is a quantity-comparison discrepancy, not evidence that the existing scalar
+conversion should simply round the target to 100. HealthKit's converted scalar
+and the Python-style scalar agree exactly for the central fixture, but comparison
+of those scalars does not reproduce comparison of the original quantities.
+Same-unit and cross-unit neighboring values behave differently, so a generic
+epsilon or rounded target is not justified by these results.
+
+Next, expand independent unit/value/order fixtures before selecting a general
+quantity-aware Python comparison rule. Preserve raw target units, retain strict
+same-unit behavior, and validate any proposed rule against native results rather
+than captured dosing outcomes. Then rerun the complete protected replay cohort,
+counting both recovered and newly lost commands and downstream history effects.
+No replay correction, app change, or clinical claim is made by this probe.
