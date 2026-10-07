@@ -118,7 +118,7 @@ def summary(payload, metadata):
     return '\n'.join(lines) + '\n'
 
 
-def run_probe(output):
+def run_probe(output, matrix=False):
     if platform.system() != 'Darwin':
         raise RuntimeError('Native execution requires macOS/Xcode; use the dedicated GitHub workflow')
     output.mkdir(parents=True, exist_ok=True)
@@ -127,6 +127,7 @@ def run_probe(output):
     def run(*args, timeout=300):
         nonlocal counter
         counter += 1
+        print(f'Native probe command {counter}: {args[0]} {args[1:]}', flush=True)
         result = subprocess.run(args, cwd=ROOT, text=True, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, timeout=timeout)
         (output / f'{counter:02d}-{Path(args[0]).name}.log').write_text(result.stdout, encoding='utf-8')
@@ -155,6 +156,9 @@ def run_probe(output):
     (output / 'result.json').write_text(json.dumps(payload, indent=2), encoding='utf-8')
     report = summary(payload, metadata)
     (output / 'summary.md').write_text(report, encoding='utf-8')
+    if matrix:
+        from probe_healthkit_quantity_matrix import run_matrix
+        report += '\n' + run_matrix(output, run, sdk, device['udid'], platform.machine())
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as stream:
             stream.write(report)
@@ -164,8 +168,9 @@ def run_probe(output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'artifacts/healthkit-boundary-probe')
+    parser.add_argument('--matrix', action='store_true', help='Also run the independent synthetic quantity matrix')
     args = parser.parse_args()
-    run_probe(args.output.resolve())
+    run_probe(args.output.resolve(), matrix=args.matrix)
 
 
 if __name__ == '__main__':

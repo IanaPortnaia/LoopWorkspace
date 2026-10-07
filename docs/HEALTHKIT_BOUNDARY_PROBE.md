@@ -99,3 +99,31 @@ same-unit behavior, and validate any proposed rule against native results rather
 than captured dosing outcomes. Then rerun the complete protected replay cohort,
 counting both recovered and newly lost commands and downstream history effects.
 No replay correction, app change, or clinical claim is made by this probe.
+
+## Independent Quantity Matrix
+
+The workflow now also runs `--matrix`, retaining the original 12-fixture probe.
+The new matrix has 3,888 synthetic cases: six glucose-unit encodings, every
+ordered unit pair, 12 independent seed values, and nine perturbations per pair.
+Perturbations include adjacent representable doubles and ordinary +/-1 mg/dL
+controls. No captured outcomes or patient data are used to generate this matrix.
+
+Six development seed values and six different validation seed values are fixed
+in source before native execution. These are software-conformance fixtures, not
+clinical holdout data. Comparing several rules against the same matrix does not
+make their selection an independent validation of physiological predictions.
+
+Each native record retains both comparison directions, self-comparison, both
+cross-unit scalar conversions, unit conversion factors, and conversions to four
+common units, all with IEEE-754 bit patterns. The validator checks input identity,
+coverage, scalar transport and ordinary controls. Cross-unit antisymmetry is
+measured rather than assumed. The summary evaluates several predeclared scalar
+comparison rules using native outputs; it does not assert those conversions have
+already been reproduced in Python. No rule is promoted to replay automatically.
+
+The matrix input, result and summary are included in the existing artifact. Run
+all probe checks locally with:
+
+```sh
+python -m unittest discover -s Scripts/tests -p 'test_healthkit*.py' -v
+```
