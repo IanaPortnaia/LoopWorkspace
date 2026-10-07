@@ -25,8 +25,10 @@ let cases = envelope["cases"] as! [[String: Any]]
 let commonUnits = ["mg/dL", "g/L", "kg/L", "mol<180.1558800000541>/L"]
 var rows: [[String: Any]] = []
 for source in cases {
-    let leftValue = (source["left_value"] as! NSNumber).doubleValue
-    let rightValue = (source["right_value"] as! NSNumber).doubleValue
+    // Decimal JSON -> NSNumber parsing can move adjacent doubles by several ULPs.
+    // Use the independently checked binary inputs, not a second decimal conversion.
+    let leftValue = Double(bitPattern: UInt64(source["left_value_bits"] as! String, radix: 16)!)
+    let rightValue = Double(bitPattern: UInt64(source["right_value_bits"] as! String, radix: 16)!)
     let leftUnit = HKUnit(from: source["left_unit"] as! String)
     let rightUnit = HKUnit(from: source["right_unit"] as! String)
     let left = HKQuantity(unit: leftUnit, doubleValue: leftValue)

@@ -121,6 +121,13 @@ measured rather than assumed. The summary evaluates several predeclared scalar
 comparison rules using native outputs; it does not assert those conversions have
 already been reproduced in Python. No rule is promoted to replay automatically.
 
+The initial matrix run 37579025637 was rejected: Foundation decimal JSON parsing
+changed 460 input rows before comparison. This is not valid matrix evidence. The
+Swift probe now reconstructs its inputs from the supplied IEEE-754 bit strings;
+the Python validator still verifies every returned input value and bit pattern.
+This avoids silently testing different doubles while preserving the original
+independent fixtures and all validation checks.
+
 The matrix input, result and summary are included in the existing artifact. Run
 all probe checks locally with:
 
