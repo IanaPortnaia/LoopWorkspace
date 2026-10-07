@@ -33,9 +33,9 @@ def next_float(value, steps):
     return value
 
 
-def fixtures():
+def fixtures(seeds_by_split=None):
     rows = []
-    for split, seeds in SEEDS.items():
+    for split, seeds in (SEEDS if seeds_by_split is None else seeds_by_split).items():
         for seed in seeds:
             for left_unit, left_scale in UNITS:
                 for right_unit, right_scale in UNITS:
@@ -57,10 +57,10 @@ def check_number(row, name):
         raise ValueError('Invalid or altered native scalar: ' + name)
 
 
-def validate_result(payload):
-    expected = {r['id']: r for r in fixtures()}
+def validate_result(payload, expected_rows=None, fixture_set=NAME):
+    expected = {r['id']: r for r in (fixtures() if expected_rows is None else expected_rows)}
     rows = payload.get('cases', [])
-    if payload.get('schema_version') != 1 or payload.get('fixture_set') != NAME:
+    if payload.get('schema_version') != 1 or payload.get('fixture_set') != fixture_set:
         raise ValueError('Unexpected quantity matrix schema')
     if len(rows) != len(expected) or {r['id'] for r in rows} != set(expected):
         raise ValueError('Missing or duplicated quantity matrix fixtures')
@@ -69,10 +69,10 @@ def validate_result(payload):
             raise ValueError('Changed matrix input')
         if row['native_compare'] not in RELATIONS or row['native_reverse_compare'] not in RELATIONS or row['native_self_compare'] != 'same':
             raise ValueError('Invalid native relation')
-        # Cross-unit antisymmetry is measured, not assumed.
-        if row['left_unit'] == row['right_unit']:
-            if row['native_compare'] != relation(row['left_value'], row['right_value']):
-                raise ValueError('Same-unit control failed')
+        # Edge comparisons (including same-unit neighbors) are the measured result.
+        if row['left_unit'] == row['right_unit'] and row['left_value'] == row['right_value']:
+            if row['native_compare'] != 'same' or row['native_reverse_compare'] != 'same':
+                raise ValueError('Same-unit identity control failed')
         if row['variant'] in ('far_-1', 'far_1'):
             if row['native_compare'] != ('ascending' if row['variant'] == 'far_-1' else 'descending'):
                 raise ValueError('Ordinary magnitude control failed')
@@ -91,7 +91,10 @@ def summary(payload):
     rows = validate_result(payload)
     reverse = {'ascending': 'descending', 'descending': 'ascending', 'same': 'same'}
     asymmetric = sum(r['native_reverse_compare'] != reverse[r['native_compare']] for r in rows)
+    same_unit_differences = sum(r['left_unit'] == r['right_unit'] and
+                                r['native_compare'] != relation(r['left_value'], r['right_value']) for r in rows)
     lines = ['# Native Quantity Matrix', '', f'{len(rows)} synthetic cases; reverse-comparison asymmetries: {asymmetric}.',
+             f'Same-unit comparisons differing from strict scalar order: {same_unit_differences}.',
              'Development and validation seed values were fixed before native execution.', '',
              'The table measures simple candidate rules using native conversion outputs, not a verified Python port.', '',
              '| Rule | Development disagreements | Validation disagreements |', '| --- | ---: | ---: |']
@@ -107,19 +110,24 @@ def summary(payload):
     return '\n'.join(lines) + '\n'
 
 
-def run_matrix(output, run, sdk, device_id, architecture):
+def execute_matrix(output, run, sdk, device_id, architecture, envelope, prefix):
     source = Path(__file__).with_name('HealthKitQuantityMatrix.swift')
-    input_path = (output / 'matrix-input.json').resolve()
-    result_path = (output / 'matrix-result.json').resolve()
-    input_path.write_text(json.dumps(dict(schema_version=1, fixture_set=NAME, cases=fixtures()), indent=2), encoding='utf-8')
+    input_path = (output / f'{prefix}-input.json').resolve()
+    result_path = (output / f'{prefix}-result.json').resolve()
+    input_path.write_text(json.dumps(envelope, indent=2), encoding='utf-8')
     binary = (output / 'HealthKitQuantityMatrix').resolve()
     run('xcrun', '--sdk', 'iphonesimulator', 'swiftc', '-sdk', sdk,
         '-target', f'{architecture}-apple-ios17.0-simulator', '-Onone',
         '-framework', 'Foundation', '-framework', 'HealthKit', str(source), '-o', str(binary))
     log = run('xcrun', 'simctl', 'spawn', device_id, str(binary), str(input_path), str(result_path), timeout=120)
-    if log.splitlines().count(f'HEALTHKIT_QUANTITY_MATRIX_COUNT={len(fixtures())}') != 1:
+    if log.splitlines().count(f"HEALTHKIT_QUANTITY_MATRIX_COUNT={len(envelope['cases'])}") != 1:
         raise ValueError('Native matrix did not report completion')
-    payload = json.loads(result_path.read_text(encoding='utf-8'))
+    return json.loads(result_path.read_text(encoding='utf-8'))
+
+
+def run_matrix(output, run, sdk, device_id, architecture):
+    envelope = dict(schema_version=1, fixture_set=NAME, cases=fixtures())
+    payload = execute_matrix(output, run, sdk, device_id, architecture, envelope, 'matrix')
     report = summary(payload)
     (output / 'matrix-summary.md').write_text(report, encoding='utf-8')
     return report

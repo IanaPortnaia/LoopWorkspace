@@ -62,12 +62,20 @@ class QuantityMatrixTests(unittest.TestCase):
                 probe.validate_result(p)
 
     def test_failed_same_unit_and_ordinary_controls_rejected(self):
-        for predicate in (lambda r: r['left_unit'] == r['right_unit'] and r['variant'] == 'left_ulp_1',
+        for predicate in (lambda r: r['left_unit'] == r['right_unit'] and r['variant'] == 'left_ulp_0',
                           lambda r: r['variant'] == 'far_-1'):
             p = deepcopy(self.payload)
-            next(r for r in p['cases'] if predicate(r))['native_compare'] = 'same'
+            row = next(r for r in p['cases'] if predicate(r))
+            row['native_compare'] = 'ascending' if row['variant'] == 'left_ulp_0' else 'same'
             with self.assertRaisesRegex(ValueError, 'control'):
                 probe.validate_result(p)
+
+    def test_same_unit_neighbor_is_observed_not_assumed_strict(self):
+        p = deepcopy(self.payload)
+        row = next(r for r in p['cases'] if r['left_unit'] == r['right_unit'] == 'g/L' and r['variant'] == 'left_ulp_1')
+        row.update(native_compare='same', native_reverse_compare='same')
+        self.assertEqual(len(probe.validate_result(p)), 3888)
+        self.assertIn('strict scalar order: 1', probe.summary(p))
 
     def test_nonfinite_or_changed_common_unit_rejected(self):
         for change in ('nonfinite', 'unit', 'missing'):

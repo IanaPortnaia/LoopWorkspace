@@ -94,8 +94,8 @@ Same-unit and cross-unit neighboring values behave differently, so a generic
 epsilon or rounded target is not justified by these results.
 
 Next, expand independent unit/value/order fixtures before selecting a general
-quantity-aware Python comparison rule. Preserve raw target units, retain strict
-same-unit behavior, and validate any proposed rule against native results rather
+quantity-aware Python comparison rule. Preserve raw target units, test same-unit
+behavior too, and validate any proposed rule against native results rather
 than captured dosing outcomes. Then rerun the complete protected replay cohort,
 counting both recovered and newly lost commands and downstream history effects.
 No replay correction, app change, or clinical claim is made by this probe.
@@ -127,6 +127,29 @@ Swift probe now reconstructs its inputs from the supplied IEEE-754 bit strings;
 the Python validator still verifies every returned input value and bit pattern.
 This avoids silently testing different doubles while preserving the original
 independent fixtures and all validation checks.
+
+The exact-input matrix in run 37579413532 passed input transport but disproved a
+test assumption: 96 same-unit neighboring comparisons (in g/L and mol/L) differ
+from strict scalar order. The revised validator measures all adjacent-value
+outcomes, including same-unit cases; exact identity, ordinary +/-1 mg/dL controls,
+coverage and bit-pattern integrity are still mandatory. The earlier assertion
+that all same-unit comparisons should remain strict is not a general native rule.
+
+An empirical candidate now reproduces all 7,776 forward/reverse comparisons and
+38,880 tested conversions in that exploratory matrix. Its conversion uses
+separate multiplication and division through a concentration coefficient in
+mg/L, not multiplication by a collapsed ratio. Comparison uses the standard
+binary64 epsilon (strictly less than 2^-52) in each original unit and returns a
+non-equal order only when the two conversion directions agree. This is a measured
+compatibility rule, not recovered Apple source or a clinical tolerance.
+
+The candidate is frozen in `Scripts/healthkit_quantity_candidate.py` before
+executing 2,928 new confirmation cases: eight new concentration seeds and 336
+same-unit absolute-epsilon checks, including zero and negative synthetic values.
+Confirmation requires exact native forward/reverse decisions and bit-for-bit
+conversions to both input and four common units. Its receipt records the candidate
+SHA256; failures remain failures rather than relaxing a comparison threshold.
+No Loop app or Python replay controller imports this candidate yet.
 
 The matrix input, result and summary are included in the existing artifact. Run
 all probe checks locally with:

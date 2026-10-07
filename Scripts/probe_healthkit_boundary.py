@@ -159,6 +159,8 @@ def run_probe(output, matrix=False):
     if matrix:
         from probe_healthkit_quantity_matrix import run_matrix
         report += '\n' + run_matrix(output, run, sdk, device['udid'], platform.machine())
+        from probe_healthkit_quantity_confirmation import run_confirmation
+        report += '\n' + run_confirmation(output, run, sdk, device['udid'], platform.machine())
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as stream:
             stream.write(report)

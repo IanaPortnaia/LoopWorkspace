@@ -14,6 +14,9 @@ on:
       - Scripts/HealthKitQuantityMatrix.swift
       - Scripts/probe_healthkit_quantity_matrix.py
       - Scripts/tests/test_healthkit_quantity_matrix.py
+      - Scripts/healthkit_quantity_candidate.py
+      - Scripts/probe_healthkit_quantity_confirmation.py
+      - Scripts/tests/test_healthkit_quantity_candidate.py
 
 permissions:
   contents: read
